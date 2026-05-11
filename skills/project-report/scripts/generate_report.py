@@ -38,6 +38,14 @@ def list_available_projects(project_root: Path) -> List[str]:
     return [f.stem for f in config_dir.glob('*.yaml')]
 
 
+def get_sls_threshold(project_config: Dict[str, Any]) -> int:
+    """获取 SLS threshold，从第一个 sls 条目读取，无则返回默认值 50"""
+    sls_config = project_config.get('sls', [])
+    if sls_config and len(sls_config) > 0 and 'sls_threshold' in (sls_config[0] or {}):
+        return sls_config[0].get('sls_threshold', 50)
+    return 50
+
+
 def get_enabled_content_types(project_config: Dict[str, Any],
                         types_param: Optional[str] = None) -> Dict[str, bool]:
     """获取启用的内容类型
