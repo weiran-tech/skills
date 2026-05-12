@@ -228,16 +228,20 @@ def analyze_stats(json_file_path: str, days_label: str) -> dict:
 def print_result(stats: Dict, organization_id: str = ""):
     """打印结果 - 按负责人分组，带 Emoji"""
     label = stats['days_label']
+    unresolved_count = stats['unresolved']
     print(f"""## 线上故障统计
 
 | 统计项 | 数量 |
 |--------|------|
-| **当前所有未解决线上故障** | **{stats['unresolved']}** |
+| **当前所有未解决线上故障** | **{unresolved_count}** |
 | **`{label}`创建的线上故障** | **{stats['created']}** |
 | **`{label}`关闭的线上故障** | **{stats['closed']}** |""")
 
     unresolved_items = stats.get('unresolved_items', [])
-    if not unresolved_items:
+    if unresolved_count > 0 and not unresolved_items:
+        print(f"\n⚠️  统计显示有 {unresolved_count} 个未解决故障，但未获取到明细清单数据")
+        return
+    if unresolved_count == 0:
         print("\n✅ 当前没有未解决的线上故障！")
         return
 

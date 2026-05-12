@@ -29,7 +29,10 @@ compatibility: Python 3.8+, uv
 /project-report project=氪金兽 type=bugs,sentry bugs:range='-10 days'
 
 # 自定义 SLS 阈值
-/project-report project=氪金兽 type=sls sls:threshold=75 sls[host=www.kejinshou.com]
+/project-report project=氪金兽 type=sls sls:threshold=75 sls[name=www]
+
+# slow log
+/project-report project=氪金兽 type=slow_log slow_log[name=kjs-main]
 ```
 
 ## 执行流程
@@ -49,12 +52,14 @@ compatibility: Python 3.8+, uv
 
 根据过滤后的类型，依次调用对应的技能收集数据：
 
-| 类型   | 标题         | 技能调用                                                                                                       | 特殊处理                           |
-| ------ | ------------ | -------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| bugs   | 线上故障     | `/yunxiao-bug-stats space_id={space_id} range={range}`                                                         | —                                  |
-| req    | 技术需求     | `/yunxiao-req-stats space_id={space_id} range={range}`                                                         | —                                  |
-| sentry | Sentry       | 按分组逐组调用 `/sentry-exception-output projects={projects} title={项目名}-{分组名}`                          | 多分组循环执行                     |
-| sls    | 接口高频统计 | `/aliyun-sls-stats project={project} logstore={logstore} region={region} host={host} threshold={threshold:50}` | 每条配置独立执行，为空则跳过该条目 |
+| 类型     | 标题         | 技能调用                                                                              | 特殊处理                           |
+| -------- | ------------ | ------------------------------------------------------------------------------------- | ---------------------------------- |
+| bugs     | 线上故障     | `/yunxiao-bug-stats space_id={space_id} range={range}`                                | —                                  |
+| req      | 技术需求     | `/yunxiao-req-stats space_id={space_id} range={range}`                                | —                                  |
+| sentry   | Sentry       | 按分组逐组调用 `/sentry-exception-output projects={projects} title={项目名}-{分组名}` | 多分组循环执行                     |
+| sls      | 接口高频统计 | `/aliyun-sls-stats {sls 段落配置, 除 name 参数外, 所有参数均透传}`                    | 每条配置独立执行，为空则跳过该条目 |
+| slow_log | slow log     | `/aliyun-sql-slow-log {slow_log 段落配置, 除 name 参数外, 所有参数均透传}`            | 每条配置独立执行，为空则跳过该条目 |
+
 
 
 ### Step 3: 生成报告文件
@@ -82,8 +87,14 @@ compatibility: Python 3.8+, uv
 ## 接口高频统计
 {sls 结果，每个 host 一个小节；未采集则填"（本次未采集）"}
 
-### {host}
-{该 host 的 SLS 统计结果}
+### {name}
+{该 name 的 SLS 统计结果}
+
+## slow log
+{slow_log 结果，每个 name 一个小节；未采集则填"（本次未采集）"}
+
+### {name}
+{该 name 的 slow log 统计结果}
 ```
 
 **异常处理**：
@@ -106,11 +117,16 @@ sentry:
 
 # SLS 配置
 sls:
-  - host: domain.com
+  - name: domain
+    host: domain.com
     project: sls-project
     logstore: logstore-name
     region: cn-hangzhou
     threshold: 50
+
+slow_log:
+  - name: domain
+    instance-id: instance-id
 ```
 
 ## 输出约定

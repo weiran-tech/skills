@@ -26,17 +26,19 @@ hash -r
 
 ## 命令参数
 
-| 参数               | 必填 | 默认值            | 说明                              |
-| ------------------ | ---- | ----------------- | --------------------------------- |
-| `--instance-id`    | 是   | -                 | RDS 实例 ID                       |
-| `--region`         | 否   | cn-hangzhou       | 地域 ID                           |
-| `--db-name`        | 否   | -                 | 数据库名过滤                      |
-| `--days`           | 否   | 7                 | 统计天数                          |
-| `--max-time-threshold` | 否 | 0              | 仅显示最大耗时 >= 此值(ms) 的 SQL |
-| `--page-size`      | 否   | 100               | 每页记录数（30~100）              |
-| `--top-N`          | 否   | 20                | 输出排名前 N 个不同 SQL           |
-| `--title`          | 否   | 慢 SQL 统计报告    | 报告标题                          |
-| `--dry-run`        | 否   | false             | 仅打印 API 调用信息，不执行       |
+| 参数                   | 必填 | 默认值          | 说明                              |
+| ---------------------- | ---- | --------------- | --------------------------------- |
+| `--instance-id`        | 是   | -               | RDS 实例 ID                       |
+| `--region`             | 否   | cn-hangzhou     | 地域 ID                           |
+| `--db-name`            | 否   | -               | 数据库名过滤                      |
+| `--days`               | 否   | 7               | 统计天数                          |
+| `--max-time-threshold` | 否   | 0               | 仅显示最大耗时 >= 此值(ms) 的 SQL |
+| `--page-size`          | 否   | 100             | 每页记录数（30~100）              |
+| `--top-N`              | 否   | 20              | 输出排名前 N 个不同 SQL           |
+| `--title`              | 否   | 慢 SQL 统计报告 | 报告标题                          |
+| `--dry-run`            | 否   | false           | 仅打印 API 调用信息，不执行       |
+
+**⚠️ 时区注意：** 脚本内部使用本地时区计算时间戳，但阿里云 API 需要 UTC 格式。东八区环境下 `--days` 非 1 的默认值可能返回空数据，建议始终显式指定 `--days` 参数（如 `--days 7`）。
 
 ## 使用示例
 
@@ -95,11 +97,11 @@ uv run .claude/skills/aliyun-sql-slow-log/scripts/stats.py analyze \
 
 ### TOP 10 最慢 SQL 排行
 
-| 排名 | 最大耗时(ms) | 出现次数 | 累计执行 | 平均扫描行数 | SQLHash | 数据库 |
-|------|-------------|---------|---------|-------------|---------|--------|
-| 1    | 88,192      | 12      | 275     | 2,336,456   | 59ceebc1 | kr_v1 |
-| 2    | 19,414      | 3       | 27      | 2,263,388   | c4f7ce15 | kr_v1 |
-| 3    | 9,711       | 3       | 17      | 27,787      | af8f737a | kr_v1 |
+| 排名 | 最大耗时(ms) | 出现次数 | 累计执行 | 平均扫描行数 | SQLHash  | 数据库 |
+| ---- | ------------ | -------- | -------- | ------------ | -------- | ------ |
+| 1    | 88,192       | 12       | 275      | 2,336,456    | 59ceebc1 | kr_v1  |
+| 2    | 19,414       | 3        | 27       | 2,263,388    | c4f7ce15 | kr_v1  |
+| 3    | 9,711        | 3        | 17       | 27,787       | af8f737a | kr_v1  |
 ...
 
 ### 详细信息
@@ -109,4 +111,103 @@ uv run .claude/skills/aliyun-sql-slow-log/scripts/stats.py analyze \
 
 [2] Hash: c4f7ce15afc51a3f59ea20eddd523f44 | 最大耗时: 19,414ms | 出现: 3 次 | 累计执行: 27 次
    SQL: select third_goods_append.*, third_goods.status as yy_status, ... from third_goods_append left join ... where platform_name = 'YY' ...
+```
+
+## 报告生成要求
+
+在 project-report 等场景中调用本技能时，需按以下格式输出完整报告：
+
+### 报告结构
+
+每个慢 SQLHash 详情需包含：
+1. **基本信息** — Hash、最大耗时、出现次数、累计执行、来源主机、时间范围
+2. **SQL 原文** — 截取前 200 字符（去除反引号）+ `...` 省略符
+3. **优化建议** — 根据 SQL 特征分析潜在问题，逐条列出可执行的优化方案
+4. **优先级判断** — 在汇总中给出 🔴 HIGH / 🟡 MEDIUM / 🟢 LOW 分级
+
+#### 优化建议判定规则
+
+| SQL 特征 | 优化方向 |
+|---------|---------|
+| 多表 JOIN + COUNT + 扫描行数大 (>10万) | 建索引 / 引入缓存宽表预计算 |
+| WHERE 条件列无索引嫌疑 | 确认字段索引覆盖情况 |
+| SELECT * + 大数据量扫描 | 精确指定查询列 + LIMIT 控制 |
+| 锁等待时间长 (LockTimeMS > 0) | 排查长事务 / 行锁竞争 |
+| 全表扫描 (ParseRowCounts >> ReturnRowCounts) | 添加 WHERE 过滤列的复合索引 |
+
+#### 优先级判定
+
+| 条件 | 级别 |
+|------|------|
+| 最大耗时 > 5s 或 累计执行 > 100 次且耗时 > 2s | 🔴 HIGH |
+| 最大耗时 > 1s 或 扫描行数 > 50万 | 🟡 MEDIUM |
+| 最大耗时 > 500ms 但未达 medium 标准 | 🟢 LOW |
+
+### 详情查看地址
+
+在每个 SQLHash 下方附上 RDS 控制台定位信息：
+
+```markdown
+## SQLHash 详情查看地址
+
+### RDS 控制台入口
+https://rdsnext.console.aliyun.com/{region}/i/{instance-id}/log?selectTab=logDetail
+
+左侧菜单 → 日志管理与报警 → 日志审计 / 慢日志明细
+
+### 各 Hash 定位信息
+
+| # | SQLHash (前8位) | 预计命中时间 | 来源 IP |
+|---|----------------|------------|---------|
+| [1] | `{hash[:8]}` | {first_time} ~ {last_time} | {host_ip} |
+```
+
+> 注：阿里云 RDS 控制台不支持直接通过 SQLHash 跳转，需在控制台中根据 SQLHash 或时间范围筛选。
+
+### 报告模板
+
+完整的 Markdown 报告模板：
+
+```markdown
+# {项目名} - {date}
+
+## slow log
+已采集：近 {days} 天共 {hash_count} 个 SQLHash 存在慢查询，TOP1 最大耗时 **{top_max_ms}ms**
+
+### {name}
+| 排名 | 最大耗时(ms) | 出现次数 | 累计执行 | 平均扫描行数 | SQLHash | 数据库 |
+|------|-------------|---------|---------|-------------|---------|--------|
+| {row data}
+
+#### 详细信息
+
+**[1] Hash: `{hash}` | 最大耗时: {max_ms}ms | 出现: {count} 次 | 累计执行: {exec} 次**
+- 来源主机: `{host_ip}`
+- 时间范围: {first_time} ~ {last_time}
+- SQL: `{sql_text_snippet}`
+- ⚠️ **优化建议:**
+  1. {建议1}
+  2. {建议2}
+
+---
+**汇总**
+- RDS 实例: `{instance_id}` ({region})
+- 过滤条件: max-time-threshold = {threshold}ms
+- 统计天数: {days} 天
+- 涉及不同 SQLHash 数: {unique_count} 个
+- 原始慢 SQL 记录: {total_records} 条
+- **优先级判断:**
+  - 🔴 HIGH: `{描述}`
+  - 🟡 MEDIUM: `{描述}`
+
+## SQLHash 详情查看地址
+
+### RDS 控制台入口
+https://rdsnext.console.aliyun.com/{region}/i/{instance-id}/log?selectTab=logDetail
+
+### 各 Hash 定位信息
+
+| # | SQLHash | 预计命中时间 | 来源 IP |
+|---|---------|------------|---------|
+| [1] | `{hash[:8]}` | ... | ... |
 ```

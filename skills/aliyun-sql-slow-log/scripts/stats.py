@@ -16,7 +16,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @dataclass
@@ -239,8 +239,8 @@ def main():
     # 计算时间范围（UTC 格式 yyyy-MM-ddTHH:mmZ）
     to_ts = int(time.time())
     from_ts = to_ts - (args.days * 24 * 60 * 60)
-    dt_to = datetime.fromtimestamp(to_ts, tz=None).strftime("%Y-%m-%dT%H:%MZ")
-    dt_from = datetime.fromtimestamp(from_ts, tz=None).strftime("%Y-%m-%dT%H:%MZ")
+    dt_to = datetime.fromtimestamp(to_ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+    dt_from = datetime.fromtimestamp(from_ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
 
     if args.dry_run:
         print("API 调用预览：")
