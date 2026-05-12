@@ -143,38 +143,16 @@ uv run .claude/skills/aliyun-sql-slow-log/scripts/stats.py analyze \
 | 最大耗时 > 1s 或 扫描行数 > 50万 | 🟡 MEDIUM |
 | 最大耗时 > 500ms 但未达 medium 标准 | 🟢 LOW |
 
-### 详情查看地址
-
-在每个 SQLHash 下方附上 RDS 控制台定位信息：
-
-```markdown
-## SQLHash 详情查看地址
-
-### RDS 控制台入口
-https://rdsnext.console.aliyun.com/{region}/i/{instance-id}/log?selectTab=logDetail
-
-左侧菜单 → 日志管理与报警 → 日志审计 / 慢日志明细
-
-### 各 Hash 定位信息
-
-| # | SQLHash (前8位) | 预计命中时间 | 来源 IP |
-|---|----------------|------------|---------|
-| [1] | `{hash[:8]}` | {first_time} ~ {last_time} | {host_ip} |
-```
-
-> 注：阿里云 RDS 控制台不支持直接通过 SQLHash 跳转，需在控制台中根据 SQLHash 或时间范围筛选。
-
 ### 报告模板
 
 完整的 Markdown 报告模板：
 
 ```markdown
-# {项目名} - {date}
+## {项目名} - {date}
 
-## slow log
 已采集：近 {days} 天共 {hash_count} 个 SQLHash 存在慢查询，TOP1 最大耗时 **{top_max_ms}ms**
 
-### {name}
+#### {name}
 | 排名 | 最大耗时(ms) | 出现次数 | 累计执行 | 平均扫描行数 | SQLHash | 数据库 |
 |------|-------------|---------|---------|-------------|---------|--------|
 | {row data}
@@ -191,6 +169,7 @@ https://rdsnext.console.aliyun.com/{region}/i/{instance-id}/log?selectTab=logDet
 
 ---
 **汇总**
+- 查看地址 : https://rdsnext.console.aliyun.com/{region}/i/{instance-id}/log?selectTab=logDetail
 - RDS 实例: `{instance_id}` ({region})
 - 过滤条件: max-time-threshold = {threshold}ms
 - 统计天数: {days} 天
@@ -200,14 +179,4 @@ https://rdsnext.console.aliyun.com/{region}/i/{instance-id}/log?selectTab=logDet
   - 🔴 HIGH: `{描述}`
   - 🟡 MEDIUM: `{描述}`
 
-## SQLHash 详情查看地址
-
-### RDS 控制台入口
-https://rdsnext.console.aliyun.com/{region}/i/{instance-id}/log?selectTab=logDetail
-
-### 各 Hash 定位信息
-
-| # | SQLHash | 预计命中时间 | 来源 IP |
-|---|---------|------------|---------|
-| [1] | `{hash[:8]}` | ... | ... |
 ```
