@@ -51,8 +51,8 @@ compatibility: Python 3.8+, uv
 
 | 类型   | 标题         | 技能调用                                                                                                       | 特殊处理                           |
 | ------ | ------------ | -------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| bugs   | 线上故障     | `/yunxiao-bug-stats space_id={space_id} days={range}`                                                         | —                                  |
-| req    | 技术需求     | `/yunxiao-req-stats space_id={space_id} days={range}`                                                         | —                                  |
+| bugs   | 线上故障     | `/yunxiao-bug-stats space_id={space_id} range={range}`                                                         | —                                  |
+| req    | 技术需求     | `/yunxiao-req-stats space_id={space_id} range={range}`                                                         | —                                  |
 | sentry | Sentry       | 按分组逐组调用 `/sentry-exception-output projects={projects} title={项目名}-{分组名}`                          | 多分组循环执行                     |
 | sls    | 接口高频统计 | `/aliyun-sls-stats project={project} logstore={logstore} region={region} host={host} threshold={threshold:50}` | 每条配置独立执行，为空则跳过该条目 |
 
@@ -61,7 +61,7 @@ compatibility: Python 3.8+, uv
 
 **输出目录**：`report/{project}/QA/`（不存在则自动创建）
 
-**文件名格式**：`{mm-dd-hh-mm}-{range}-{type:ALL}.md`
+**文件名格式**：`{MM-DD-HH-MM}-{range}-{type:ALL}.md`
 
 **文件内容格式**：
 ```markdown

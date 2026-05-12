@@ -41,10 +41,12 @@ description: 获取云效项目中需求评审结果统计
 仅仅使用 : advancedConditions 来组合查询状态和类型, **注意**：advancedConditions 是 json 字符串, 并非 json 对象
 
 ```json
-// 按类型查询, 支持传入列表
-{"conditionGroups":[[<condition1>, <condition2>]]}
-
-// 组合 condition, 支持列表组合
+// 组合条件：AND 关系写在同一个 conditionGroups 数组内（推荐）
+{"conditionGroups":[[
+    {"fieldIdentifier":"workitemType","..."},
+    {"fieldIdentifier":"status","..."},
+    {"fieldIdentifier":"updateStatusAt","..."}
+]]}
 
 // condition : 限定类型查询, 支持传入列表
 {"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["<type_id>"],"className":"workitemType","format":"list"}
