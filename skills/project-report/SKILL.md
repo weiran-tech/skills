@@ -52,54 +52,69 @@ compatibility: Python 3.8+, uv
 
 根据过滤后的类型，依次调用对应的技能收集数据：
 
-| 类型     | 标题         | 技能调用                                                                              | 特殊处理                           |
-| -------- | ------------ | ------------------------------------------------------------------------------------- | ---------------------------------- |
-| bugs     | 线上故障     | `/yunxiao-bug-stats space_id={space_id} range={range}`                                | —                                  |
-| req      | 技术需求     | `/yunxiao-req-stats space_id={space_id} range={range}`                                | —                                  |
-| sentry   | Sentry       | 按分组逐组调用 `/sentry-exception-output projects={projects} title={项目名}-{分组名}` | 多分组循环执行                     |
-| sls      | 接口高频统计 | `/aliyun-sls-stats {sls 段落配置, 除 name 参数外, 所有参数均透传}`                    | 每条配置独立执行，为空则跳过该条目 |
-| slow_log | slow log     | `/aliyun-sql-slow-log {slow_log 段落配置, 除 name 参数外, 所有参数均透传}`            | 每条配置独立执行，为空则跳过该条目 |
+| 类型     | 标题       | 技能调用                                                                              | 特殊处理                           |
+| -------- | ---------- | ------------------------------------------------------------------------------------- | ---------------------------------- |
+| bugs     | 线上故障   | `/yunxiao-bug-stats space_id={space_id} range={range}`                                | —                                  |
+| req      | 需求统计   | `/yunxiao-req-stats space_id={space_id} range={range}`                                | —                                  |
+| sentry   | Sentry异常 | 按分组逐组调用 `/sentry-exception-output projects={projects} title={项目名}-{分组名}` | 多分组循环执行                     |
+| sls      | 高频接口   | `/aliyun-sls-stats {sls 段落配置, 除 name 参数外, 所有参数均透传}`                    | 每条配置独立执行，为空则跳过该条目 |
+| slow_log | SQL慢日志  | `/aliyun-sql-slow-log {slow_log 段落配置, 除 name 参数外, 所有参数均透传}`            | 每条配置独立执行，为空则跳过该条目 |
 
 
 
 ### Step 3: 生成报告文件
 
-**输出目录**：`report/{project}/QA/`（不存在则自动创建）
+**输出目录**：`report/{project}/QA-{MM-DD-HH-MM}/`（不存在则自动创建，时间戳使用当前执行时间，精确到分钟）
 
-**文件名格式**：`{MM-DD-HH-MM}-{range}-{type:ALL}.md`
+**输出规则**：每种数据采集类型独立保存为一个 `.md` 文件
 
-**文件内容格式**：
+| 文件             | 内容                                |
+| ---------------- | ----------------------------------- |
+| `线上故障.md`    | 线上故障统计数据                    |
+| `需求统计.md`    | 需求统计数据                        |
+| `Sentry异常.md`  | Sentry 异常统计（按分组输出小节）   |
+| `高频接口.md`    | 接口高频统计（每个 name 一个小节）  |
+| `SQL慢日志.md`   | slow log 统计（每个 name 一个小节） |
+
+**文件名格式示例**：`report/{project}/QA-{MM-DD-HH-MM}/bugs.md`
+
+**文件内容格式**：各文件仅包含对应类型的标题与数据，不合并其他类型。
+
 ```markdown
-# {项目名} - {date}
-
-## 线上故障
+# {项目名} - {date} — 线上故障
 {bugs 结果；未采集则填"（本次未采集）"}
+```
 
-## 技术需求
+```markdown
+# {项目名} - {date} — 需求统计
 {req 结果；未采集则填"（本次未采集）"}
+```
 
-## Sentry
-{sentry 结果，按分组输出小节；未采集则填"（本次未采集）"}
+```markdown
+# {项目名} - {date} — Sentry
 
 ### {分组名}
 {该分组的 Sentry 统计结果}
+```
 
-## 接口高频统计
-{sls 结果，每个 host 一个小节；未采集则填"（本次未采集）"}
+```markdown
+# {项目名} - {date} — 接口高频统计
 
 ### {name}
 {该 name 的 SLS 统计结果}
+```
 
-## slow log
-{slow_log 结果，每个 name 一个小节；未采集则填"（本次未采集）"}
+```markdown
+# {项目名} - {date} — slow log
 
 ### {name}
 {该 name 的 slow log 统计结果}
 ```
 
 **异常处理**：
-- 若某类型数据获取失败，对应部分填写"数据获取失败"
-- SLS 配置中若 `project` 或 `logstore` 为空，跳过该条目
+- 若某类型数据获取失败，对应文件内容为"数据获取失败"
+- SLS 配置中若 `project` 或 `logstore` 为空，跳过该条目，但仍保留对应的空文件
+- 如果某类型未在当前执行中被请求，则不生成对应文件
 
 ## 项目配置文件结构
 
@@ -131,7 +146,7 @@ slow_log:
 
 ## 输出约定
 
-1. 使用 Write 工具写入报告文件
-2. 只返回最终生成的文件路径，不输出中间结果
+1. 使用 Write 工具写入报告文件，每种类型独立保存为一个文件
+2. 返回所有生成的文件路径列表
 3. 报告文件使用 UTF-8 编码
-4. 时间戳使用当前执行时间（精确到分钟）
+4. 时间戳使用当前执行时间（精确到分钟），用于目录命名 `QA-{MM-DD-HH-MM}`
