@@ -177,7 +177,10 @@ def print_markdown_result(result: Dict, days: int, threshold: int, format_name: 
         pv_per_day = format_number(float(log.get("pv_per_day", 0)))
         percentage = f"{log.get('percentage', 0)}%"
         cumulative_percentage = f"{log.get('cumulative_percentage', 0)}%"
-        avg_time = f"{float(log.get('avg_response_time', 0)):.2f}"
+        avg_time_val = log.get('avg_response_time', 0)
+        if avg_time_val == 'null' or avg_time_val is None:
+            avg_time_val = 0
+        avg_time = f"{float(avg_time_val):.2f}"
         max_time = f"{float(log.get('max_response_time', 0)):.2f}"
 
         print(f"| {uri} | {pv_per_day} | {percentage} | {cumulative_percentage} | {avg_time} | {max_time} |")

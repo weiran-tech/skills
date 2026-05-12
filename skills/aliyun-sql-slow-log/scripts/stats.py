@@ -169,7 +169,7 @@ def build_report(
         last_str = _format_ts(s.last_time)
         hosts = ", ".join(sorted(s.host_addrs)[:3])
 
-        sql_snippet = s.sample_sql[:200].replace("`", "") if s.sample_sql else "N/A"
+        sql_snippet = s.sample_sql[:300].replace("`", "") if s.sample_sql else "N/A"
 
         lines.append(f"[{i}] Hash: `{s.sql_hash}` | 最大耗时: **{format_number(s.max_time_ms)}ms** "
                      f"| 出现: {s.count} 次 | 累计执行: {format_number(s.total_exec)} 次")
