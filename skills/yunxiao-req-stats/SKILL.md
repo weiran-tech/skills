@@ -3,7 +3,7 @@ name: yunxiao-req-stats
 description: 获取云效项目中需求评审结果统计
 ---
 
-# 云效需求生命周期统计
+# 云效需求统计
 
 ## 参数
 
@@ -42,25 +42,21 @@ description: 获取云效项目中需求评审结果统计
 
 ```json
 // 按类型查询, 支持传入列表
-{"conditionGroups":[[{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["<type_id>"],"className":"workitemType","format":"list"}]]}
+{"conditionGroups":[[<conditions>, <conditions>]]}
+
+// 组合 conditions, 支持列表组合
+
+// 限定类型查询, 支持传入列表
+{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["<type_id>"],"className":"workitemType","format":"list"}
 
 // 限定状态查询, 支持传入列表
-{"conditionGroups":[[{"fieldIdentifier":"status","operator":"CONTAINS","value":["<status_id>"],"className":"status","format":"list"}]]}
+{"fieldIdentifier":"status","operator":"CONTAINS","value":["<status_id>"],"className":"status","format":"list"}
 
-// 同时限定类型+状态
-{"conditionGroups":[[{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["<type_id>"],"className":"workitemType","format":"list"},{"fieldIdentifier":"status","operator":"CONTAINS","value":["<status_id>"],"className":"status","format":"list"}]]}
+// 创建时间日期范围查询 (BETWEEN)
+{"fieldIdentifier":"gmtCreate","operator":"BETWEEN","value":["<start_iso> 00:00:00"],"toValue":"<end_iso> 23:59:59","className":"dateTime","format":"input"}
 
-// gmtCreate 日期范围查询 (BETWEEN) — Step 2 使用
-{"conditionGroups":[[{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["<type_id>"],"className":"workitemType","format":"list"},{"fieldIdentifier":"gmtCreate","operator":"BETWEEN","value":["<start_iso> 00:00:00"],"toValue":"<end_iso> 23:59:59","className":"dateTime","format":"input"}]]}
-
-// gmtStatusChanged 日期范围查询 (BETWEEN) — Step 3 使用
-{"conditionGroups":[[{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["<type_ids>"],"className":"workitemType","format":"list"},{"fieldIdentifier":"gmtStatusChanged","operator":"BETWEEN","value":["<start_iso> 00:00:00"],"toValue":"<end_iso> 23:59:59","className":"dateTime","format":"input"}]]}
-
-// 多类型 + gmtCreate BETWEEN（产品类创建数）
-{"conditionGroups":[[{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["9uy29901re573f561d69jn40"],"className":"workitemType","format":"list"},{"fieldIdentifier":"gmtCreate","operator":"BETWEEN","value":["2026-05-01 00:00:00"],"toValue":"2026-05-11 23:59:59","className":"dateTime","format":"input"}]]}
-
-// 多类型 + gmtStatusChanged BETWEEN（关闭总数）
-{"conditionGroups":[[{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["9uy29901re573f561d69jn40","bca48ee2a0976d38f4802fae"],"className":"workitemType","format":"list"},{"fieldIdentifier":"gmtStatusChanged","operator":"BETWEEN","value":["2026-05-01 00:00:00"],"toValue":"2026-05-11 23:59:59","className":"dateTime","format":"input"}]]}
+// 变更时间日期范围查询 (BETWEEN)
+{"fieldIdentifier":"gmtStatusChanged","operator":"BETWEEN","value":["<start_iso> 00:00:00"],"toValue":"<end_iso> 23:59:59","className":"dateTime","format":"input"}
 ```
 
 ## 功能
@@ -98,77 +94,60 @@ uv run scripts/stats.py --parse-days "<range>"
 
 ### Step 1：未评审需求数量
 
-取待处理总数，服务端精确计数：
+取待处理总数，服务端精确计数
 
 ```
 mcp__yunxiao__search_workitems(
-    organizationId, spaceIdentifier, category: Req, perPage: 1, includeDetails: false,
+    organizationId, spaceId, category: Req, perPage: 1, includeDetails: false,
     advancedConditions: '...'
 )
-→ pagination.total = 产品类待处理总数（≈ 未评审数上限）
+→ pagination.total = 产品类待处理总数
 ```
 
-重复获取技术类数据。**共 2 次 MCP 调用**。
+重复获取技术类数据。**共 2 次 MCP 调用**
 
 
 ### Step 2：创建于范围内数量
 
-对每种类型各 1 次，取 pagination.total。**共 2 次**：
+对每种类型各 1 次，取 pagination.total。**共 2 次**
 
 ```
 mcp__yunxiao__search_workitems(
-    organizationId, spaceIdentifier: '<space_id>', category: Req,
+    organizationId, spaceId: '<space_id>', category: Req,
     advancedConditions: '<advanced_conditions_json>',
     perPage: 1, includeDetails: false
 )
 → pagination.total = 该产品类创建数
 ```
 
-advancedConditions 中使用 gmtCreate BETWEEN 查询：
+advancedConditions 中使用创建时间日期范围查询 
 
-```json
-{"conditionGroups":[[{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["<type_id>"],"className":"workitemType","format":"list"},{"fieldIdentifier":"gmtCreate","operator":"BETWEEN","value":["<start_iso> 00:00:00"],"toValue":"<end_iso> 23:59:59","className":"dateTime","format":"input"}]]}
-```
-
-示例：
-```json
-{"conditionGroups":[[{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["9uy29901re573f561d69jn40"],"className":"workitemType","format":"list"},{"fieldIdentifier":"gmtCreate","operator":"BETWEEN","value":["2026-05-01 00:00:00"],"toValue":"2026-05-11 23:59:59","className":"dateTime","format":"input"}]]}
-```
-
----
 
 ### Step 3：关闭于范围内数量
 
-将两种类型 + 两个 statusStage 合并，单次查询即可。
+将两种类型 + 两个 statusStage 合并，单次查询即可, advancedConditions 中使用 gmtStatusChanged BETWEEN 查询
 
-**推荐：一次查询拿到合计**（仅 1 次 MCP 调用）：
 
 ```
 mcp__yunxiao__search_workitems(
-    organizationId, spaceIdentifier: '<space_id>', category: Req,
+    organizationId, spaceId: '<space_id>', category: Req,
     advancedConditions: '<advanced_conditions_json>',
     perPage: 1, includeDetails: false
 )
 → pagination.total = 两类合计关闭总数
 ```
 
-advancedConditions 中使用 gmtStatusChanged BETWEEN 查询：
-
-```json
-{"conditionGroups":[[{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["<type_ids>"],"className":"workitemType","format":"list"},{"fieldIdentifier":"gmtStatusChanged","operator":"BETWEEN","value":["<start_iso> 00:00:00"],"toValue":"<end_iso> 23:59:59","className":"dateTime","format":"input"}]]}
-```
-
 如需分类后的细分数值，则分两次调用（各传单个 type_id），共 2 次。
 
----
+
 
 ### Step 4：已评审待计划「评审通过」清单 + 数量
 
-**Step 4a — 总量（分页优先）**：先查待处理总数：
+**Step 4a — 总量（分页优先）**：先查待处理总数
 
 ```
 mcp__yunxiao__search_workitems(
-    organizationId, spaceIdentifier: '<space_id>', category: Req,
+    organizationId, spaceId: '<space_id>', category: Req,
     perPage: 1, includeDetails: false,
     advancedConditions: '...'
 )
@@ -179,7 +158,7 @@ mcp__yunxiao__search_workitems(
 
 ```
 mcp__yunxiao__search_workitems(
-    organizationId, spaceIdentifier: '<space_id>', category: Req,
+    organizationId, spaceId: '<space_id>', category: Req,
     perPage: 200, includeDetails: true,
     advancedConditions: '...'
 )
@@ -230,17 +209,20 @@ ALWAYS use this exact markdown table format:
 ```
 ## 需求生命周期统计
 
-| 统计项                    | 数量  |
-| ------------------------- | ----- |
-| **未评审需求总数**        | **N** |
-| └ 产品类需求              | N     |
-| └ 技术类需求              | N     |
-| **`{range}`创建需求总数** | **N** |
-| └ 产品类需求              | N     |
-| └ 技术类需求              | N     |
-| **`{range}`关闭需求总数** | **N** |
-| └ 产品类需求              | N     |
-| └ 技术类需求              | N     |
+| 统计项                       | 数量  |
+| ---------------------------- | ----- |
+| **未评审(待AI评审)需求总数** | **N** |
+| └ 产品类需求                 | N     |
+| └ 技术类需求                 | N     |
+| **待人工评审需求总数**       | **N** |
+| └ 产品类需求                 | N     |
+| └ 技术类需求                 | N     |
+| **`{range}`创建需求总数**    | **N** |
+| └ 产品类需求                 | N     |
+| └ 技术类需求                 | N     |
+| **`{range}`关闭需求总数**    | **N** |
+| └ 产品类需求                 | N     |
+| └ 技术类需求                 | N     |
 
 ## 已评审待计划需求
 
