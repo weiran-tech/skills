@@ -17,15 +17,15 @@ description: AI 自动评审云效需求并生成评审意见。当用户提到"
 
 **必须使用以下工具，不要思考工具名称，直接复制调用**：
 
-| 工具名称 | 用途 | 必填参数 |
-|----------|------|----------|
-| `mcp__yunxiao__search_projects` | 获取项目列表 | 无参数 |
-| `mcp__yunxiao__list_sprints` | 获取迭代列表 | `organizationId`, `id` |
-| `mcp__yunxiao__search_workitems` | 搜索需求列表 | `organizationId`, `spaceId`, `spaceType`, `category`, `perPage`, `advancedConditions` |
-| `mcp__yunxiao__get_work_item` | 获取单条需求详情 | `organizationId`, `workItemId` |
-| `mcp__yunxiao__create_work_item_comment` | 给需求添加评论 | `organizationId`, `workItemId`, `content` |
-| `mcp__yunxiao__update_work_item` | 更新需求状态/字段 | `organizationId`, `workItemId`, `updateWorkItemFields` |
-| `mcp__yunxiao__get_workitem_type_field_config` | 获取需求类型字段配置 | `organizationId`, `workItemTypeId` |
+| 工具名称                                       | 用途                 | 必填参数                                                                              |
+| ---------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------- |
+| `mcp__yunxiao__search_projects`                | 获取项目列表         | 无参数                                                                                |
+| `mcp__yunxiao__list_sprints`                   | 获取迭代列表         | `organizationId`, `id`                                                                |
+| `mcp__yunxiao__search_workitems`               | 搜索需求列表         | `organizationId`, `spaceId`, `spaceType`, `category`, `perPage`, `advancedConditions` |
+| `mcp__yunxiao__get_work_item`                  | 获取单条需求详情     | `organizationId`, `workItemId`                                                        |
+| `mcp__yunxiao__create_work_item_comment`       | 给需求添加评论       | `organizationId`, `workItemId`, `content`                                             |
+| `mcp__yunxiao__update_work_item`               | 更新需求状态/字段    | `organizationId`, `workItemId`, `updateWorkItemFields`                                |
+| `mcp__yunxiao__get_workitem_type_field_config` | 获取需求类型字段配置 | `organizationId`, `workItemTypeId`                                                    |
 
 ---
 
@@ -40,9 +40,9 @@ description: AI 自动评审云效需求并生成评审意见。当用户提到"
 以表格形式展示，只显示序号和项目名称，不显示项目ID：
 
 | 序号 | 项目名称 |
-|------|---------|
-| 1 | xxx项目 |
-| 2 | xxx项目 |
+| ---- | -------- |
+| 1    | xxx项目  |
+| 2    | xxx项目  |
 
 让用户通过输入序号来选择项目。
 
@@ -60,9 +60,9 @@ mcp__yunxiao__list_sprints(
 以表格形式展示，只显示序号和迭代名称，不显示迭代ID：
 
 | 序号 | 迭代名称 |
-|------|---------|
-| 1 | xxx迭代 |
-| 2 | xxx迭代 |
+| ---- | -------- |
+| 1    | xxx迭代  |
+| 2    | xxx迭代  |
 
 必须让用户选择一个具体迭代，不支持"当前迭代"、"所有未完成迭代"等快捷选项。
 
@@ -124,24 +124,24 @@ mcp__yunxiao__get_work_item(
 根据需求类型使用不同的评审标准：
 
 #### 📋 产品类需求评审标准
-| 评审项 | 通过条件 |
-|--------|----------|
-| 需求完整性 | 内容完整、描述清晰、范围明确 |
-| 业务逻辑 | 逻辑通顺、前后自洽、无明显冲突 |
-| 场景覆盖 | 核心场景完整、关键规则清晰 |
-| 交互规范 | 交互/文案/异常提示合理，符合产品习惯 |
-| 验收标准 | 明确可测，研发/测试可清晰理解 |
-| 共识达成 | 需求范围、实现规则无明显争议 |
+| 评审项     | 通过条件                             |
+| ---------- | ------------------------------------ |
+| 需求完整性 | 内容完整、描述清晰、范围明确         |
+| 业务逻辑   | 逻辑通顺、前后自洽、无明显冲突       |
+| 场景覆盖   | 核心场景完整、关键规则清晰           |
+| 交互规范   | 交互/文案/异常提示合理，符合产品习惯 |
+| 验收标准   | 明确可测，研发/测试可清晰理解        |
+| 共识达成   | 需求范围、实现规则无明显争议         |
 
 #### 🔧 技术类需求评审标准
-| 评审项 | 通过条件 |
-|--------|----------|
-| 方案清晰度 | 技术方案描述清晰，改造范围明确 |
-| 架构合理性 | 整体架构、代码设计符合团队规范 |
-| 数据兼容性 | 数据变更、接口调整兼容现有业务 |
-| 稳定性设计 | 考虑容错、无严重性能/安全隐患 |
-| 上线风险 | 影响范围清晰、有回滚/兜底方案 |
-| 方案对齐 | 研发/测试对齐实现方案，无重大争议 |
+| 评审项     | 通过条件                          |
+| ---------- | --------------------------------- |
+| 方案清晰度 | 技术方案描述清晰，改造范围明确    |
+| 架构合理性 | 整体架构、代码设计符合团队规范    |
+| 数据兼容性 | 数据变更、接口调整兼容现有业务    |
+| 稳定性设计 | 考虑容错、无严重性能/安全隐患     |
+| 上线风险   | 影响范围清晰、有回滚/兜底方案     |
+| 方案对齐   | 研发/测试对齐实现方案，无重大争议 |
 
 **评审结论判定规则**：
 - **✅ 评审通过**：满足所有核心评审项，无需额外评论
