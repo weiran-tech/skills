@@ -21,16 +21,19 @@ weiran-project-qa-analysis       : 项目分析
 arch-analyzer                    : 架构分析
 arch-publish                     : 架构发布
 
-
 # 质量 / 工作流
 project-report                   : 项目报告
 sentry-exception-output          : Sentry 异常输出
+aliyun-sls-stats                 : 阿里云 SLS 统计
+aliyun-sql-slow-log              : 阿里云 SQL 慢查询日志
+yunxiao-req-stats                : 云效需求统计
 yunxiao-bug-stats                : 云效 bug 统计
 yunxiao-req-ai-review            : 云效需求 AI 审核
 yunxiao-req-export-unplanned     : 云效需求导出未计划
 yunxiao-req-import               : 云效需求导入
 yunxiao-req-review-stats         : 云效需求审核统计
-yunxiao-req-stats                : 云效需求统计
+
+# 用例
 yunxiao-testcase-import          : 云效测试用例导入
 yunxiao-testcase-review          : 云效测试用例审核
 ```
