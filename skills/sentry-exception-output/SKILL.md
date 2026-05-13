@@ -26,7 +26,7 @@ description: 查询 Sentry 指定项目的异常事件并按指定格式输出 M
 调用 `mcp__sentry__find_organizations` 获取组织 slug 和 region URL，后续链接格式为 `{regionUrl}/organizations/{slug}/issues/{issueId}`
 
 ### 2. 获取项目列表
-- 如果 projects 是前缀（包含 "*"），调用 `mcp__sentry__find_projects` 逐个模式搜索匹配的项目
+- 如果 projects 是模式匹配方式（包含 "*"），调用 `mcp__sentry__find_projects` 获取所有列表, 并逐个按照 projects 中的模式筛选匹配的项目
 - 如果 projects 是具体列表，直接使用
 - 记录每个项目 slug 与其所属分组的关系
 
