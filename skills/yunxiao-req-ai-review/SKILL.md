@@ -1,17 +1,84 @@
 ---
 name: yunxiao-req-ai-review
-description: AI 自动评审云效需求并生成评审意见。当用户提到"需求评审"、"评审需求"、"AI 评审"、"自动评审"、"待处理需求评审"、"评审待处理"等词时触发。工作流：选择项目 → 选择迭代 → 获取"待处理"状态的需求 → 逐条执行 AI 评审 → 评审驳回/待人工评审 → 回写评论和状态到云效。适用于迭代前需求批量评审、需求质量把控、评审自动化等场景。
+description: AI 自动评审云效需求并生成评审意见。调用 yunxiao-req-review 技能执行标准化评审，支持参数调用：`/yunxiao-req-ai-review space_id=xxx`，无参数时交互式询问。
 ---
 
 # 云效 AI 需求评审
 
+## 技能依赖
+
+本技能**必须调用 `yunxiao-req-review` 技能**执行标准化评审逻辑，不自行实现评审标准。
+
+- **评审引擎**：`/yunxiao-req-review` - 提供12项评分标准、总分计算、评级判定
+- **输出格式**：完整评审报告（评分明细、核心问题、改进优先级、总体评语）
+- **集成方式**：从云效获取需求详情 → 组装评审内容 → 调用 yunxiao-req-review → 回写结果到云效
+
 ## 参数
 
-从 CLAUDE.md 读取（勿硬编码，以 CLAUDE.md 为准）：
-- `<organization_id>`: 云效组织ID
-- `<space_id>`: 云效项目ID（如未指定，先列出所有项目供用户选择）
+| 参数              | 说明                                  | 必填                 | 默认值 | 示例 |
+| ----------------- | ------------------------------------- | -------------------- | ------ | ---- |
+| `organization_id` | 云效组织ID（从 CLAUDE.md 上下文获取） | 否                   | -      | -    |
+| `space_id`        | 云效项目ID                            | 是（交互时自动获取） | -      | -    |
+| `review_mode`     | 评审模式：`full` 完整评审 / `quick` 快速评审 | 否 | `full` | `quick` |
 
----
+**调用方式：**
+- 参数调用：`/yunxiao-req-ai-review space_id=2c0a78d7474abf949e37f28cca max_review=50 review_mode=full`
+- 无参数调用：`/yunxiao-req-ai-review` → 交互式询问
+
+**固定筛选条件（不可配置）：**
+- 状态：待处理
+- 迭代：未分配迭代
+
+## 常量配置（组织级固定值，无需动态获取）
+
+**状态常量**
+| 状态     | ID                           |
+| -------- | ---------------------------- |
+| 待处理   | `100005`                     |
+| 待评审   | `b6d1af1f9bd7ed8b3a79e27a11` |
+| 评审驳回 | `62a829f0a33157f511cc6379a5` |
+| 评审通过 | `bc5e4a3a72ef6f7c0ecdac11ee` |
+
+**优先级常量**
+| 优先级 | ID                           | 数量   |
+| ------ | ---------------------------- | ------ |
+| 紧急   | `f5a3e463cce0bef658ea9be69a` | 2 条   |
+| 高     | `f4e494382a954d30b2ee1022a3` | 4 条   |
+| 中     | `012ecf2e458fa055c529573824` | 145 条 |
+| 低     | `8769fcec4b00aa281f2d1a4f76` | 5 条   |
+
+**评级-状态映射表**（由 yunxiao-req-review 返回的评级决定云效状态）：
+| yunxiao-req-review 评级 | 云效状态ID | 评审结论 |
+| ----------------------- | ---------- | -------- |
+| 优秀（90–100） | `bc5e4a3a72ef6f7c0ecdac11ee` | 评审通过 |
+| 良好（75–89） | `b6d1af1f9bd7ed8b3a79e27a11` | 待人工评审 |
+| 待改进（55–74） | `62a829f0a33157f511cc6379a5` | 评审驳回 |
+| 不通过（0–54） | `62a829f0a33157f511cc6379a5` | 评审驳回 |
+
+## advancedConditions 模板
+
+使用 `advancedConditions` 组合查询条件，直接从服务端获取统计数量, **注意**：advancedConditions 的值是 json 字符串, 并非 json 对象
+
+```json
+// 组合条件：AND 关系写在同一个 conditionGroups 数组内
+{"conditionGroups":[[
+    {"fieldIdentifier":"sprint","..."},
+    {"fieldIdentifier":"workitemType","..."},
+    {"fieldIdentifier":"priority","..."}
+]]}
+
+// condition : 限定迭代为未分配迭代
+{"fieldIdentifier":"sprint","operator":"CONTAINS","value":["EMPTY_VALUE"],"toValue":null,"className":"sprint","format":"list"}
+
+// condition : 限定工作项类型为产品类需求和技术类需求, 硬编码即可
+{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["9uy29901re573f561d69jn40","bca48ee2a0976d38f4802fae"],"toValue":null,"className":"workitemType","format":"list"}
+
+// condition : 组合优先级查询
+{"fieldIdentifier":"priority","operator":"CONTAINS","value":["<prio_id>"],"toValue":null,"className":"option","format":"list"}
+
+// condition : 限定状态为待处理
+{"fieldIdentifier":"status","operator":"CONTAINS","value":["100005"],"className":"status","format":"list"}
+```
 
 ## 核心 MCP 工具速查表（减少思考时间）
 
@@ -20,7 +87,6 @@ description: AI 自动评审云效需求并生成评审意见。当用户提到"
 | 工具名称                                       | 用途                 | 必填参数                                                                              |
 | ---------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------- |
 | `mcp__yunxiao__search_projects`                | 获取项目列表         | 无参数                                                                                |
-| `mcp__yunxiao__list_sprints`                   | 获取迭代列表         | `organizationId`, `id`                                                                |
 | `mcp__yunxiao__search_workitems`               | 搜索需求列表         | `organizationId`, `spaceId`, `spaceType`, `category`, `perPage`, `advancedConditions` |
 | `mcp__yunxiao__get_work_item`                  | 获取单条需求详情     | `organizationId`, `workItemId`                                                        |
 | `mcp__yunxiao__create_work_item_comment`       | 给需求添加评论       | `organizationId`, `workItemId`, `content`                                             |
@@ -31,9 +97,7 @@ description: AI 自动评审云效需求并生成评审意见。当用户提到"
 
 ## 完整工作流
 
-### Phase 1：选择范围
-
-**Step 1.1 — 选择项目（如未指定 space_id）**
+### Phase 1：选择项目（仅当未指定 space_id 时）
 
 调用 `mcp__yunxiao__search_projects` 获取项目列表，展示给用户选择：
 
@@ -46,62 +110,55 @@ description: AI 自动评审云效需求并生成评审意见。当用户提到"
 
 让用户通过输入序号来选择项目。
 
-**Step 1.2 — 选择迭代**
-
-调用 `mcp__yunxiao__list_sprints` 获取迭代列表：
-
-```python
-mcp__yunxiao__list_sprints(
-  organizationId="<organization_id>",
-  id="<space_id>"
-)
-```
-
-以表格形式展示，只显示序号和迭代名称，不显示迭代ID：
-
-| 序号 | 迭代名称 |
-| ---- | -------- |
-| 1    | xxx迭代  |
-| 2    | xxx迭代  |
-
-必须让用户选择一个具体迭代，不支持"当前迭代"、"所有未完成迭代"等快捷选项。
-
----
-
 ### Phase 2：筛选待评审需求
 
-**Step 2.1 — 获取"待处理"状态的需求**
+**Step 2.1 — 获取优先级分组统计（并发调用）**
 
-调用 `mcp__yunxiao__search_workitems` 分页拉取指定迭代中状态为"待处理"的需求：
+使用 `perPage=1` 只获取总数，**并发调用 4 次**同时获取各优先级数量，减少等待时间。
 
-```python
+查询条件 : 
+- 状态：待处理
+- 迭代：未分配迭代
+
+```
 mcp__yunxiao__search_workitems(
-  organizationId="<organization_id>",
-  spaceId="<space_id>",
-  spaceType="Project",
-  category="Req",
-  perPage=200,
-  advancedConditions='{"conditionGroups":[[{"fieldIdentifier":"status","operator":"CONTAINS","value":["100005"],"className":"status","format":"list"},{"fieldIdentifier":"sprint","operator":"CONTAINS","value":["<sprint_id>"],"className":"sprint","format":"list"}]]}'
+    organizationId, spaceId, category: Bug, perPage: 1, includeDetails: false,
+    advancedConditions: '...'
 )
+# 并发获取每个优先级的数量（4 次 MCP 同时调用，perPage=1 只取总数）
+# 每个优先级使用相同 advancedConditions，仅替换 <prio_id> 为对应优先级ID
+# 所有请求完成后聚合结果：priority_name → pagination.total
 ```
 
-**重要：必须使用 `advancedConditions` 同时筛选迭代和状态，不要使用第一层的 `status` 或 `sprint` 参数，不要从结果中过滤。`advancedConditions` 必须是 JSON 字符串格式，不是 Python 对象。**
-
-循环处理直到所有数据拉取完成。
-
-**Step 2.2 — 确认评审数量**
-
-- 忽略"评审结论"字段，即使已有 [AI] 评审标记也进行重新评审
-
-如果结果 > 10 条，先告知用户数量，询问是否全量处理。
+展示优先级统计表格：
+| 优先级   | 数量  |
+| -------- | ----- |
+| 紧急     | N     |
+| 高       | N     |
+| 中       | N     |
+| 低       | N     |
+| **总计** | **N** |
 
 ---
 
-### Phase 3：AI 逐条评审
+**Step 2.2 — 确认评审范围（AskUserQuestion 交互式选择）**
+
+调用 `AskUserQuestion` 工具让用户选择：
+
+| 问题                 | 类型 | 选项                                       |
+| -------------------- | ---- | ------------------------------------------ |
+| 选择评审的优先级范围 | 多选 | 紧急、高、中、低、全部                     |
+| 选择评审数量         | 单选 | 默认 10 条（优先级降序）、全部、自定义数量 |
+
+获取用户确认后，拉取对应范围内的需求数据（按优先级降序排序）进入 Phase 3 逐条评审。
+
+---
+
+### Phase 3：调用 yunxiao-req-review 逐条评审
 
 对每一条待评审需求，告知用户"正在评审第 N/M 条：[标题]"，然后依次执行：
 
-**Step 3.1 — 获取需求详情**
+**Step 3.1 — 获取需求详情并组装评审内容**
 
 调用 `mcp__yunxiao__get_work_item` 获取完整需求详情：
 
@@ -112,91 +169,91 @@ mcp__yunxiao__get_work_item(
 )
 ```
 
-提取完整信息：
-- 需求类型（产品类/技术类）
-- 标题、描述、验收标准
-- 负责人、优先级、关联附件
-- 关联的子任务、依赖项
+提取完整信息并组装评审内容字符串：
+```python
+requirement_content = f"""
+# 需求标题：{subject}
+
+## 需求描述
+{description or '无描述'}
+
+## 基本信息
+- 需求类型：{workitem_type_name}
+- 优先级：{priority_name}
+- 负责人：{assigned_to_name}
+- 创建人：{creator_name}
+
+## 关联信息
+- 标签：{labels_list}
+- 参与人：{participants_list}
+- 附件：{attachments_list}
+"""
+```
+
+同时提取：
 - customFieldValues 中的"评审结论"字段ID
 
-**Step 3.2 — 执行评审判断**
+**Step 3.2 — 调用 yunxiao-req-review 技能执行评审**
 
-根据需求类型使用不同的评审标准：
+**必须调用 Skill 工具执行评审，不得自行评审**：
 
-#### 📋 产品类需求评审标准
-| 评审项     | 通过条件                             |
-| ---------- | ------------------------------------ |
-| 需求完整性 | 内容完整、描述清晰、范围明确         |
-| 业务逻辑   | 逻辑通顺、前后自洽、无明显冲突       |
-| 场景覆盖   | 核心场景完整、关键规则清晰           |
-| 交互规范   | 交互/文案/异常提示合理，符合产品习惯 |
-| 验收标准   | 明确可测，研发/测试可清晰理解        |
-| 共识达成   | 需求范围、实现规则无明显争议         |
+```python
+# 完整评审模式（默认）
+Skill(skill="yunxiao-req-review", args=f"requirement_title='{subject}' requirement_content='{requirement_content}' output_format='full'")
 
-#### 🔧 技术类需求评审标准
-| 评审项     | 通过条件                          |
-| ---------- | --------------------------------- |
-| 方案清晰度 | 技术方案描述清晰，改造范围明确    |
-| 架构合理性 | 整体架构、代码设计符合团队规范    |
-| 数据兼容性 | 数据变更、接口调整兼容现有业务    |
-| 稳定性设计 | 考虑容错、无严重性能/安全隐患     |
-| 上线风险   | 影响范围清晰、有回滚/兜底方案     |
-| 方案对齐   | 研发/测试对齐实现方案，无重大争议 |
-
-**评审结论判定规则**：
-- **✅ 评审通过**：满足所有核心评审项，无需额外评论
-- **评审驳回**：有 2 项以上核心项不满足，或有明显严重缺陷（包括需求描述为空/过于简略）
-  - 更新状态为"评审驳回"（statusIdentifier: `62a829f0a33157f511cc6379a5`）
-  - **必须调用 `mcp__yunxiao__create_work_item_comment` 写详细评论说明驳回原因**
-  - 更新"评审结论"自定义字段为 `"[AI] 驳回：{简要原因}"`
-- **待人工评审**：部分项不满足，或有模糊点需人工确认
-  - 更新状态为"待评审"（status: `b6d1af1f9bd7ed8b3a79e27a11`）
-  - **必须调用 `mcp__yunxiao__create_work_item_comment` 写详细评审意见评论**
-
-**Step 3.3 — 生成评论内容**
-
-**评审驳回评论模板**：
+# 快速评审模式（review_mode=quick）
+Skill(skill="yunxiao-req-review", args=f"requirement_title='{subject}' requirement_content='{requirement_content}' mode='quick'")
 ```
-AI 评审结论：驳回
+
+**评审返回内容包含**（完整模式）：
+- 总分（0–100）
+- 评级（优秀/良好/待改进/不通过）
+- 评分明细表
+- 核心问题列表
+- 改进优先级表
+- 总体评语
+
+**Step 3.3 — 根据评级确定处理方式**
+
+对照评级-状态映射表：
+
+| yunxiao-req-review 评级 | 云效状态ID | 处理方式 |
+| ----------------------- | ---------- | -------- |
+| 优秀（90–100） | `bc5e4a3a72ef6f7c0ecdac11ee` | 评审通过，写简评 |
+| 良好（75–89） | `b6d1af1f9bd7ed8b3a79e27a11` | 待人工评审，写完整报告 |
+| 待改进（55–74） | `62a829f0a33157f511cc6379a5` | 评审驳回，写完整报告 |
+| 不通过（0–54） | `62a829f0a33157f511cc6379a5` | 评审驳回，写完整报告 |
+
+**特殊边界处理**：需求描述为空或极简短的，直接标记"评审驳回"，评论内容注明"[AI] 需求描述为空 / 过于简略，无法进行评审"。
+
+**Step 3.4 — 生成评论内容（来自 yunxiao-req-review 输出）**
+
+将 yunxiao-req-review 返回的评审报告直接作为评论内容，添加头部标识：
+
+```
+🤖 AI 自动化评审报告
 ━━━━━━━━━━━━━━━━━━━━━
-问题清单：
-1. {问题1}
-2. {问题2}
-...
-
-改进建议：
-- {建议1}
-- {建议2}
-
-建议修改后重新提交评审
-```
-
-**待人工评审评论模板**：
-```
-AI 评审意见：待人工确认
+【总分：{XX}/100】【评级：{优秀/良好/待改进/不通过}】
 ━━━━━━━━━━━━━━━━━━━━━
-关注点：
-1. {关注点1}
-2. {关注点2}
-...
 
-建议讨论方向：
-- {建议1}
-- {建议2}
+[此处直接插入 yunxiao-req-review 返回的完整评审报告]
+
+━━━━━━━━━━━━━━━━━━━━━
+⚠️ AI 评审仅供参考，最终结论以人工评审为准
 ```
 
-**Step 3.4 — 回写云效**
+**Step 3.5 — 回写云效**
 
 **发布评论（必须执行，不要思考工具名称，直接调用）**：
 ```python
 mcp__yunxiao__create_work_item_comment(
   organizationId="<organization_id>",
   workItemId="<workitem_id>",
-  content="<评审评论内容>"
+  content="<完整评审报告>"
 )
 ```
 
-更新工作项状态：
+更新工作项状态（根据评级映射）：
 ```python
 # 状态常量（直接使用，不要思考或查询）：
 # 待处理 → 100005
@@ -208,7 +265,7 @@ mcp__yunxiao__update_work_item(
   organizationId="<organization_id>",
   workItemId="<workitem_id>",
   updateWorkItemFields={
-    "status": "<new_status_id>"
+    "status": "<mapped_status_id>"
   }
 )
 ```
@@ -225,7 +282,7 @@ mcp__yunxiao__update_work_item(
   workItemId="<workitem_id>",
   updateWorkItemFields={
     "customFieldValues": {
-      "<review_conclusion_field_id>": "[AI] 驳回/待评审：..."
+      "<review_conclusion_field_id>": f"[AI] {评级}：总分 {XX}/100"
     }
   }
 )
@@ -237,31 +294,48 @@ mcp__yunxiao__update_work_item(
 
 ### Phase 4：汇总报告
 
-所有需求评审完毕后输出统计报告：
+所有需求评审完毕后输出统计报告，按 yunxiao-req-review 的评级分类：
 
 ```
-AI 需求评审完成
+🤖 AI 需求评审完成
 ━━━━━━━━━━━━━━━━━━━━━
 统计结果：
 总计评审：{N} 条
-评审通过：{N} 条
-评审驳回：{N} 条
-待人工评审：{N} 条
+优秀（90–100）：{N} 条 → 评审通过
+良好（75–89）：{N} 条 → 待人工评审
+待改进（55–74）：{N} 条 → 评审驳回
+不通过（0–54）：{N} 条 → 评审驳回
 
-驳回需求清单：
-- [需求标题](云效链接) → 原因：{简要}
+平均得分：{XX.X} 分
 
-待人工评审清单：
-- [需求标题](云效链接) → 关注点：{简要}
+━━━━━━━━━━━━━━━━━━━━━
+⚠️ 评审驳回清单（需重提）：
+- [需求标题](云效链接) → {XX}分 · 核心问题：{简要}
+
+📋 待人工评审清单（需补充完善）：
+- [需求标题](云效链接) → {XX}分 · 主要缺失：{简要}
+
+✅ 评审通过清单（可推进）：
+- [需求标题](云效链接) → {XX}分
 ```
 
 ---
 
 ## 注意事项
 
+### 核心原则
+- **禁止自行评审**：必须调用 `yunxiao-req-review` 技能执行评审，不得自行判断或评分
+- **透传评审结果**：评审报告内容直接来自 yunxiao-req-review 的输出，不得修改评分或评级
+
+### 技术细节
 - **状态ID校准**：如更新状态失败，先用 `mcp__yunxiao__get_work_item` 查一条状态为"评审驳回"/"待评审"的需求，确认其 statusIdentifier
-- **评审边界**：需求描述为空或极简短的，直接标记"评审驳回"并注明"[AI] 需求描述为空 / 过于简略，无法进行评审"
+- **评审边界**：需求描述为空或极简短的，直接标记"评审驳回"并注明"[AI] 需求描述为空 / 过于简略，无法进行评审"，跳过 yunxiao-req-review 调用
 - **评论去重**：如果工作项已有 🤖 开头的 AI 评论，追加新评论时标注"(第2次评审)"
 - **自定义字段容错**："评审结论"字段可能不存在于某些项目，不存在时跳过更新，不要中断流程
 - **限速保护**：每次更新间隔 1-2 秒，避免触发 API 限流
 - **评论失败处理**：如果评论工具调用失败，继续执行状态更新，不要中断整个评审流程，最后在汇总报告中标注哪些需求评论失败
+
+### 与 yunxiao-req-review 集成说明
+1. 本技能仅负责云效数据读写和流程编排，**评审逻辑完全委托**给 yunxiao-req-review
+2. yunxiao-req-review 负责评分标准、评级判定、报告格式化
+3. 两个技能解耦，未来评审标准更新只需修改 yunxiao-req-review 一处即可
