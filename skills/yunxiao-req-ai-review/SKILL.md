@@ -83,9 +83,6 @@ description: AI 自动评审云效需求并生成评审意见。调用 yunxiao-r
 
 // condition : 限定状态为待处理
 {"fieldIdentifier":"status","operator":"CONTAINS","value":["100005"],"className":"status","format":"list"}
-
-// condition : 限定标签（如用户在 Step 2.0 选择了标签过滤）
-{"fieldIdentifier":"tags","operator":"CONTAINS","value":["<tag_id_or_name>"],"toValue":null,"className":"option","format":"list"}
 ```
 
 ## 核心 MCP 工具速查表（减少思考时间）
@@ -100,131 +97,50 @@ description: AI 自动评审云效需求并生成评审意见。调用 yunxiao-r
 | `mcp__yunxiao__create_work_item_comment` | 给需求添加评论    | `organizationId`, `workItemId`, `content`                                             |
 | `mcp__yunxiao__update_work_item`         | 更新需求状态/字段 | `organizationId`, `workItemId`, `updateWorkItemFields`                                |
 
----
-
 ## 完整工作流
 
 ### Phase 1：选择项目（仅当未指定 space_id 时）
 
-调用 `mcp__yunxiao__search_projects` 获取项目列表，使用 AskUserQuestion 分多组展示供用户选择：
+调用 `mcp__yunxiao__search_projects` 获取项目列表，**直接以序号列表展示**供用户选择：
 
 **交互规则**：
-- AskUserQuestion 每个问题最多 4 个选项
-- 项目数量超过 4 个时，分组展示，每组 3 个项目 + 1 个导航选项
-- 在一个 AskUserQuestion 工具调用中完成所有分组，通过**多个问题**实现
+- 输出纯文本序号列表，每行一个项目（序号 + 项目名称）
+- 用户直接回复对应数字即可（无需使用 AskUserQuestion 工具）
 
-**分组示例（6 个项目）**：
-
+**示例输出**：
 ```
-问题 1：【第1组】请选择项目，如您的项目不在此组请选择「跳过本组」
-选项：
-- 项目A
-- 项目B
-- 项目C
-- 跳过本组 → 我的项目在第2组
-
-问题 2：【第2组】请选择项目，如已在第1组选择请选择「已选择」
-选项：
-- 项目D
-- 项目E
-- 项目F
-- 已选择 → 已在第1组选择项目
+请选择要评审的项目（回复数字）：
+1. 聚单云
+2. 客诉工单
+3. 氪金平台
 ```
 
 **实现要点**：
-- 在一个 AskUserQuestion 调用中包含所有分组问题，避免多次交互
-- 前 n-1 组包含 3 个项目 + "跳过本组"
-- 最后一组包含剩余项目 + "已选择"
-- 用户在某组选择具体项目即为最终选择，忽略其他组的答案
-- 每 3 个项目为一组，剩余项目归入最后一组
+- 直接展示，无需分组、无需导航选项
+- 用户回复数字即完成选择，一步到位
+- 最多展示 20 个项目，超出时提示过滤方式
 
 ### Phase 2：筛选待评审需求
 
-**Step 2.0 — 前置标签筛选（可选）**
-
-在获取优先级统计之前，先让用户选择是否按标签过滤需求。此步骤可跳过（选择"不筛选"时直接进入 Step 2.1）。
-
-**Step 2.0.1 — 获取需求标签分布**
-
-调用 `mcp__yunxiao__search_workitems` 拉取一批待处理需求（`perPage=50`, `includeDetails=false`），从中提取已有标签及其出现频次。
-
-查询条件（与后续查询一致）：
-- 状态：待处理 (`100005`)
-- 迭代：未分配迭代 (`EMPTY_VALUE`)
-- 工作项类型：产品类需求 + 技术类需求
-
-```
-mcp__yunxiao__search_workitems(
-    organizationId, spaceId, category: Req, perPage: 50, includeDetails: false,
-    advancedConditions: '{"conditionGroups":[[{"fieldIdentifier":"sprint","operator":"CONTAINS","value":["EMPTY_VALUE"],"toValue":null,"className":"sprint","format":"list"},{"fieldIdentifier":"status","operator":"CONTAINS","value":["100005"],"className":"status","format":"list"},{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["9uy29901re573f561d69jn40","bca48ee2a0976d38f4802fae"],"toValue":null,"className":"workitemType","format":"list"}]]}'
-)
-```
-
-从返回结果中提取每条需求的 labels 字段（如有 labels 数组则取其 name 或 id），统计各标签出现次数。
-
-如果结果为空或无标签数据，跳过标签筛选直接进入 Step 2.1。
-
-**Step 2.0.2 — 展示标签分布并让用户选择（AskUserQuestion）**
-
-将标签按频次从高到低排列，分多组展示（每组最多 8 个标签）：
-
-| 标签 | 出现次数 |
-| ---- | -------- |
-| tag-A | 15 |
-| tag-B | 12 |
-| tag-C | 8 |
-| ... | ... |
-
-调用 `AskUserQuestion` 让用户选择：
-
-| 问题 | 类型 | 选项 |
-| ---- | ---- | ---- |
-| 是否需要按标签筛选需求 | 单选 | 需要筛选、不筛选 → 直接进入优先级统计 |
-| 选择要包含的标签（多选） | 多选 | 列出所有可用标签供勾选，支持多选；也可选「全部标签」 |
-
-**交互规则**：
-- 标签超过 8 个时分多组展示，每组 8 个 + 1 个"跳过本组"/"已选择"导航选项
-- 用户在"选择要包含的标签"问题上可以多选
-- 选择了具体标签后，后续查询会自动加上标签过滤条件
-
-**Step 2.0.3 — 构建标签过滤条件**
-
-根据用户选择的标签，生成 advancedConditions 中的标签过滤片段：
-
-```json
-// condition : 限定标签（AND 关系写在同一个 conditionGroups 数组内）
-{"fieldIdentifier":"tags","operator":"CONTAINS","value":["<tag_id_or_name>"],"toValue":null,"className":"option","format":"list"}
-```
-
-若用户选择不筛选，则不添加此条件，后续步骤的 advancedConditions 不包含 tags 过滤器。
-
-**注意**：如从样本中无法确定正确的 fieldIdentifier，尝试以下常见值：`tags`、`label`、`labels`。如果更新失败，用单条需求调用 `get_work_item` 检查其标签字段的实际 identifier。
-
----
-
-**Step 2.1 — 获取优先级分组统计（并发调用，含可能的标签过滤）**
+**Step 2.1 — 获取优先级分组统计（并发调用）**
 
 使用 `perPage=1` 只获取总数，**并发调用 4 次**同时获取各优先级数量，减少等待时间。
 
-查询条件 :
+查询条件：
 - 状态：待处理
 - 迭代：未分配迭代
-- [标签]：[来自 Step 2.0 的用户选择，如果有]
-
-如果 Step 2.0 中用户选择了标签过滤，则在每个优先级的 advancedConditions 中追加 tags 条件。
 
 ```
 mcp__yunxiao__search_workitems(
     organizationId, spaceId, category: Req, perPage: 1, includeDetails: false,
-    advancedConditions: '...'  // 可能包含 tags 过滤
+    advancedConditions: '{"conditionGroups":[[{"fieldIdentifier":"sprint","operator":"CONTAINS","value":["EMPTY_VALUE"],"toValue":null,"className":"sprint","format":"list"},{"fieldIdentifier":"status","operator":"CONTAINS","value":["100005"],"className":"status","format":"list"},{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["9uy29901re573f561d69jn40","bca48ee2a0976d38f4802fae"],"toValue":null,"className":"workitemType","format":"list"},{"fieldIdentifier":"priority","operator":"CONTAINS","value":["<prio_id>"],"toValue":null,"className":"option","format":"list"}]]}'
 )
 # 并发获取每个优先级的数量（4 次 MCP 同时调用，perPage=1 只取总数）
 # 每个优先级使用相同 advancedConditions，仅替换 <prio_id> 为对应优先级ID
-# 如果用户在 Step 2.0 选择了标签，所有请求都追加相同的 tags 条件
 # 所有请求完成后聚合结果：priority_name → pagination.total
 ```
 
-展示优先级统计表格（此时数量已受标签过滤影响）：
+展示优先级统计表格：
 | 优先级   | 数量  |
 | -------- | ----- |
 | 紧急     | N     |
@@ -233,36 +149,34 @@ mcp__yunxiao__search_workitems(
 | 低       | N     |
 | **总计** | **N** |
 
----
+**Step 2.2 — 确认评审范围（简洁选择）**
 
-**Step 2.2 — 确认评审范围（AskUserQuestion 交互式选择，含标签信息提示）**
-
-在展示优先级统计后，先向用户总结当前筛选条件（含已应用的标签过滤），再让用户确认评审范围。
-
-**筛选条件摘要示例**：
+展示当前筛选条件摘要：
 ```
 当前筛选条件：
 - 状态：待处理
 - 迭代：未分配迭代
-- 标签：tag-A, tag-B（来自前置标签筛选）
 - 总计：N 条待评审需求
 ```
 
-调用 `AskUserQuestion` 工具让用户选择，一次性包含优先级范围和评审数量输入：
+直接以序号方式询问评审范围：
+```
+请选择评审范围（回复数字）：
+1. 紧急+高（优先评审高优先级）
+2. 全部（按优先级降序）
+3. 仅中+低（先处理积压）
 
-| 问题                 | 类型 | 选项                                                                 |
-| -------------------- | ---- | -------------------------------------------------------------------- |
-| 选择评审的优先级范围 | 单选 | 紧急+高、全部、仅中+低                                                |
-| 选择评审数量         | 单选 | 默认10条（优先级降序）、全部、自定义数量（请在下方输入框填写数量）   |
-| 自定义评审数量       | 单选 | （用户直接输入数字，如"5"、"20"）                                    |
+请选择评审数量（回复数字）：
+1. 默认10条
+2. 全部
+3. 自定义（请输入数量）
+```
 
-**交互优化**：选择"自定义数量"时，AskUserQuestion 直接提供输入框让用户填写数量，避免二次交互。
-
-获取用户确认后，使用最终组合条件（状态 + 迭代 + [标签] + 优先级）拉取需求数据（按优先级降序排序）进入 Phase 3 逐条评审。
-
----
+获取用户确认后，使用最终组合条件（状态 + 迭代 + 优先级）拉取需求数据（按优先级降序排序）进入 Phase 3 逐条评审。
 
 ### Phase 3：调用 yunxiao-req-review 逐条评审
+
+**必须** 逐条评审，不得批量处理
 
 对每一条待评审需求，告知用户"正在评审第 N/M 条：[标题]"，然后依次执行：
 
@@ -292,7 +206,6 @@ requirement_content = f"""
 - 创建人：{creator_name}
 
 ## 关联信息
-- 标签：{labels_list}
 - 参与人：{participants_list}
 - 附件：{attachments_list}
 """
@@ -398,27 +311,18 @@ mcp__yunxiao__create_work_item_comment(
 )
 ```
 
-评论失败处理：先清洗后重试一次；仍失败则记录标注，继续执行后续两个子步骤，不中断流程。
+评论失败处理：先清洗后重试一次；仍失败则记录标注，继续执行后续子步骤，不中断流程。
 
-#### 子步骤 2：更新工作项状态（根据评级映射）
+#### 子步骤 2：合并更新工作项状态 + 评审结论字段（性能优化：1 次调用完成 2 项操作）
 
-```
-mcp__yunxiao__update_work_item(
-  organizationId="<organization_id>",
-  workItemId="<workitem_id>",
-  updateWorkItemFields={
-    "status": "<mapped_status_id>"
-  }
-)
-```
-
-#### 子步骤 3：更新"评审结论"自定义字段（所有需求必执行，不可跳过）
+**注意：此步骤已将原"子步骤 2 状态更新"和"子步骤 3 自定义字段更新"合并为单次 API 调用，性能提升 33%**
 
 ```
 mcp__yunxiao__update_work_item(
   organizationId="<organization_id>",
   workItemId="<workitem_id>",
   updateWorkItemFields={
+    "status": "<mapped_status_id>",
     "customFieldValues": {
       "92184debbf0f0d558444fa9019": "[AI] {评级}：总分 {XX}/100"
     }
@@ -428,12 +332,10 @@ mcp__yunxiao__update_work_item(
 
 **要求**：
 - 每个需求都必须写入评审结论自定义字段数据，无论评级高低
-- 仅当自定义字段 `"92184debbf0f0d558444fa9019"` 在该项目中不存在时才跳过此子步骤
-- 即使跳过，也必须记录说明，不得无故省略
+- 仅当自定义字段 `"92184debbf0f0d558444fa9019"` 在该项目中不存在时，才回退到只更新状态的独立调用
+- 即使跳过自定义字段，也必须记录说明，不得无故省略
 
 **如果任一子步骤失败**：不中断整个评审流程，在 Phase 4 汇总报告中注明哪些操作的哪些环节回写失败。
-
----
 
 ### Phase 4：汇总报告
 
@@ -443,7 +345,7 @@ mcp__yunxiao__update_work_item(
 AI 需求评审完成
 -------------------------
 筛选条件：
-- 状态：待处理 | 迭代：未分配迭代 | 标签：tag-A, tag-B
+- 状态：待处理 | 迭代：未分配迭代
 
 统计结果：
 总计评审：{N} 条
@@ -454,20 +356,27 @@ AI 需求评审完成
 
 平均得分：{XX.X} 分
 ```
-**注意**：标签行仅在 Step 2.0 中用户选择了标签过滤时才显示；未使用标签筛选时省略该行。
 
 -------------------------
 评审驳回清单（需重提）：
-- [需求标题](云效链接) → {XX}分 · 核心问题：{简要}
+- [需求标题]({云效链接}) → {XX}分 · 核心问题：{简要}
 
 待人工评审清单（需补充完善）：
-- [需求标题](云效链接) → {XX}分 · 主要缺失：{简要}
+- [需求标题]({云效链接}) → {XX}分 · 主要缺失：{简要}
 
 评审通过清单（可推进）：
-- [需求标题](云效链接) → {XX}分
+- [需求标题]({云效链接}) → {XX}分
 ```
 
----
+**云效链接格式规范**：
+```
+https://yunxiao.aliyun.com/org/{organization_id}/project/{space_id}/workitem/{workitem_id}
+```
+
+示例：
+```
+https://yunxiao.aliyun.com/org/62ac9a6364c8a06be2d5db5d/project/2c0a78d7474abf949e37f28cca/workitem/ABC123456
+```
 
 ## 注意事项
 
@@ -476,12 +385,10 @@ AI 需求评审完成
 - **透传评审结果**：评审报告内容直接来自 yunxiao-req-review 的输出，不得修改评分或评级
 
 ### 技术细节
-- **标签 fieldIdentifier 校准**：Step 2.0 中使用 `tags` 作为 fieldIdentifier，如更新失败，用单条需求调用 `get_work_item` 检查其标签字段的实际 identifier，常见值包括 `tags`、`label`、`labels`
-- **标签空数据处理**：如果样本中无标签数据或结果为空，跳过标签筛选直接进入 Step 2.1，不影响流程继续
 - **状态ID校准**：如更新状态失败，先用 `mcp__yunxiao__get_work_item` 查一条状态为"评审驳回"/"待评审"的需求，确认其 statusIdentifier
 - **评审边界**：需求描述为空或极简短的，直接标记"评审驳回"并注明"[AI] 需求描述为空 / 过于简略，无法进行评审"，跳过 yunxiao-req-review 调用
 - **评论去重**：如果工作项已有 🤖 开头的 AI 评论，追加新评论时标注"(第2次评审)"
-- **评审结论自定义字段必写**：每个需求都必须写入 `92184debbf0f0d558444fa9019` 字段的评审结论数据，不可因评级高低而跳过。仅当该项目确实不存在此自定义字段时才省略，并记录说明
+- **评审结论自定义字段必写**：每个需求都必须写入 `92184debbf0f0d558444fa9019` 字段的评审结论数据，不可因评级高低而跳过。状态更新与自定义字段更新已合并为单次 API 调用以提升性能。仅当该项目确实不存在此自定义字段时才回退到独立更新，并记录说明
 - **Markdown 转 HTML 必填**：yunxiao-req-review 输出的 Markdown 格式内容不能直接提交到云效 API（会返回 400 错误），必须先转换为 HTML 富文本或使用纯文本降级策略
 - **限速保护**：每次更新间隔 1-2 秒，避免触发 API 限流
 - **评论失败处理**：如果评论工具调用失败，先清洗后重试一次；仍失败则继续执行状态更新和自定义字段更新，不中断整个评审流程，最后在汇总报告中标注哪些需求评论失败
