@@ -181,7 +181,10 @@ def print_markdown_result(result: Dict, days: int, threshold: int, format_name: 
         if avg_time_val == 'null' or avg_time_val is None:
             avg_time_val = 0
         avg_time = f"{float(avg_time_val):.2f}"
-        max_time = f"{float(log.get('max_response_time', 0)):.2f}"
+        max_time_val = log.get('max_response_time', 0)
+        if max_time_val == 'null' or max_time_val is None:
+            max_time_val = 0
+        max_time = f"{float(max_time_val):.2f}"
 
         print(f"| {uri} | {pv_per_day} | {percentage} | {cumulative_percentage} | {avg_time} | {max_time} |")
 
