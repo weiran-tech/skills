@@ -172,15 +172,17 @@ mcp__yunxiao__search_workitems(
 3. 自定义（请输入数量）
 ```
 
-获取用户确认后，使用最终组合条件（状态 + 迭代 + 优先级）拉取需求数据（按优先级降序排序）进入 Phase 3 逐条评审。
+获取用户确认后，使用最终组合条件（状态 + 迭代 + 优先级）拉取需求数据（按优先级降序排序）。进入 Phase 3 前，**必须明确：search_workitems 仅用于获取需求 ID 列表，实际评审内容必须通过 mcp__yunxiao__get_work_item 逐条获取完整详情**。
 
 ### Phase 3：调用 yunxiao-req-review 逐条评审
 
-**必须** 逐条评审，不得批量处理
+**⚠️ 关键强制要求：必须逐条评审，不得批量处理；必须调用 get_work_item 获取完整详情，绝对不能使用 search_workitems 返回的列表数据（列表数据不包含完整的 description 字段）**
 
 对每一条待评审需求，告知用户"正在评审第 N/M 条：[标题]"，然后依次执行：
 
 **Step 3.1 — 获取需求详情并组装评审内容**
+
+**🔴 强制要求：必须调用 mcp__yunxiao__get_work_item 获取单条需求的完整详情**，search_workitems 返回的列表数据 description 字段不完整（可能为空或截断），直接使用会导致评审结果失真。
 
 调用 `mcp__yunxiao__get_work_item` 获取完整需求详情：
 
@@ -383,6 +385,7 @@ https://yunxiao.aliyun.com/org/62ac9a6364c8a06be2d5db5d/project/2c0a78d7474abf94
 ### 核心原则
 - **禁止自行评审**：必须调用 `yunxiao-req-review` 技能执行评审，不得自行判断或评分
 - **透传评审结果**：评审报告内容直接来自 yunxiao-req-review 的输出，不得修改评分或评级
+- **必须获取完整详情**：必须调用 `mcp__yunxiao__get_work_item` 获取单条需求的完整详情，**绝对不能使用 search_workitems 返回的列表数据**（列表的 description 字段不完整，会导致评审失真）
 
 ### 技术细节
 - **状态ID校准**：如更新状态失败，先用 `mcp__yunxiao__get_work_item` 查一条状态为"评审驳回"/"待评审"的需求，确认其 statusIdentifier
