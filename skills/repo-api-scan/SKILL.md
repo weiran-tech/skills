@@ -1,94 +1,124 @@
 ---
 name: repo-api-scan
-description: 扫描项目接口，按模块/业务域整理功能清单大纲并输出到 .md 文件。支持 PHP/Laravel 和 Java/Spring Boot。当用户说 "api-scan"、"功能清单"、"接口扫描"、"feature scan"、"功能大纲" 时触发。
+description: 扫描项目接口，按模块/业务方/功能组三级整理功能清单大纲并输出到 .md 文件。支持 PHP/Laravel 和 Java/Spring Boot。当用户说 "api-scan"、"功能清单"、"接口扫描"、"feature scan"、"功能大纲" 时触发。
 ---
 
 # API Scan
 
-扫描项目全部接口端点，按业务模块分组，生成功能清单大纲。只关注"做什么"，不分析实现细节。
+扫描项目全部接口端点，按「模块 → 业务方 → 功能组」三级分组，生成功能清单大纲。只关注"做什么"，不分析实现细节。
+
+## 规则文件
+
+| 项目类型 | 规则文件 |
+|---------|---------|
+| PHP / Laravel 模块化 | [rules/PHP-LARAVEL-MODULAR.md](./rules/PHP-LARAVEL-MODULAR.md) |
+| PHP / Laravel 单体 | rules/PHP-LARAVEL-SINGLE.md (待补充) |
+| Java / Spring Boot | rules/JAVA-SPRING-BOOT.md (待补充) |
+
+---
 
 ## 第一步：识别项目类型
 
 按优先级检测：
 
-| 标志文件 | 项目类型 |
-|---------|---------|
-| `composer.json` + `modules/` 目录 | PHP / Laravel 模块化 |
-| `composer.json`（无 modules） | PHP / Laravel 单体 |
-| `pom.xml` 或 `build.gradle` | Java / Spring Boot |
+| 标志文件                          | 项目类型             | 规则文档 |
+| --------------------------------- | -------------------- | -------- |
+| `composer.json` + `modules/` 目录 | PHP / Laravel 模块化 | [PHP-LARAVEL-MODULAR.md](./rules/PHP-LARAVEL-MODULAR.md) |
+| `composer.json`（无 modules）     | PHP / Laravel 单体   | 待补充 |
+| `pom.xml` 或 `build.gradle`       | Java / Spring Boot   | 待补充 |
 
 检测失败时询问用户。
 
-## 第二步：扫描接口
+---
 
-### PHP / Laravel
+## 第二步：整体流程（以 PHP 模块化为例）
 
-1. **模块化项目**：遍历 `modules/*/src/Http/Routes/*.php`，提取 `Route::any/get/post/put/delete/patch` 的 URI 和控制器方法
-2. **单体项目**：扫描 `routes/*.php`
-3. 读取控制器类（`modules/*/src/Http/Request/**/*Controller.php` 或 `app/Http/Controllers/`），提取 public 方法名
-4. 用 URI 路径 + 方法名推断功能点名称
+### 核心原则
 
-### Java / Spring Boot
+**RouteServiceProvider 中的 `require_once` 只是路由文件的加载机制，不是实际接口！**
+- 只在具体路由文件（`Routes/*.php`）中扫描实际路由定义
+- 不要把 require/include 统计为接口
 
-1. 搜索所有 `@RestController` / `@Controller` 类
-2. 提取类级 `@RequestMapping` 作为路径前缀
-3. 提取方法级 `@GetMapping` / `@PostMapping` / `@PutMapping` / `@DeleteMapping` / `@RequestMapping` 的路径和 HTTP 方法
-4. 用路径 + 方法名推断功能点名称
-5. 按 Maven/Gradle 子模块或包路径分组
+### 2.1 解析 RouteServiceProvider
+- 建立「路由文件 → 前缀信息」映射表
+- 提取 prefix、middleware、路由文件路径
+- 特殊处理 `$this->prefix` 变量替换为 `'mgr-page'`
 
-### 功能点命名规则
+### 2.2 扫描路由文件（实际提取接口）
+- **支持两种路由格式**：数组格式 `[Controller::class, 'action']` 和字符串格式 `'Controller@action'`
+- **处理嵌套 group**：逐层解析，累积完整 prefix 链、namespace、middleware
+- 拼接完整 URL = 外层 prefix + 内层累积 prefix + 路由路径
 
-从接口路径和方法名推断中文功能名称，例如：
-- `POST auth.login/1.0` → 用户登录
-- `GET /api/account/bid/my` → 我的竞价列表
-- `DELETE /category/{id}` → 删除分类
+### 2.3 业务方分类（三步校验）
+1. **文件名初判**：backend.php → 后台、web.php → 员工网页...
+2. **middleware 二次校验**：根据中间件关键词细分
+3. **路径关键词最终细分**：根据路径含 merchant/soldier/consumer/notify 等最终确定
 
-无法推断时保留原始路径 + 方法名。
+### 2.4 功能组划分（按路径 / 分层级）
+- 按路径 `/` 分割，取除前缀外的第一段路径作为功能组
+- 同路径段功能差异大时取第二段细分
 
-## 第三步：分组整理
+### 2.5 功能点命名
+- 根据 HTTP 方法 + action 中文名称映射（约 80+ 常用 action）
+- 相同路径不同 HTTP 方法视为不同接口，功能点名称区分方法
 
-按以下层次组织：
+详细规则参见：[rules/PHP-LARAVEL-MODULAR.md](./rules/PHP-LARAVEL-MODULAR.md)
 
-```
-模块/业务域
-  └── 功能组（按控制器或路径前缀）
-        └── 功能点（一个接口 = 一个功能点）
-```
+---
 
-**模块来源**（翻译为中文，无法推断时才保留英文）：
-- PHP：`modules/` 目录名翻译，如 `account` → 账户、`finance` → 财务、`market` → 市场
-- Java：Maven 子模块名或顶层包名翻译，如 `kjs-auth` → 认证、`kjs-order` → 订单
-
-**功能组来源**（不能直接用模块名，需实际分析）：
-- PHP：按 Controller 类名拆分，如 `BidController` → 竞价、`GameController` → 游戏
-- Java：按 Controller 类名或路径前缀拆分，如 `AuthController` → 认证登录、`CaptchaController` → 验证码
-- 同一个 Controller 内方法职责差异大时，可按路径前缀再细分
-
-## 第四步：生成文档
+## 第三步：生成文档
 
 输出文件：项目根目录下 `docs/feature-list.md`（目录不存在则创建）。
 
-所有模块合并为一张表格，通过「模块」和「功能组」列区分归属，便于后续导出 Excel。
-
-格式：
+### 三级嵌套结构（PHP 模块化项目）
 
 ```markdown
 # {项目名} 功能清单
 
-> 接口总数：{N}
+## 功能概览
 
-| 模块 | 功能组 | 功能点 | 接口 | 方法 |
-|------|--------|--------|------|------|
-| 账户 | 竞价 | 我的竞价列表 | /api/account/bid/my | POST |
-| 账户 | 竞价 | 创建回收竞价 | /api/account/bid_recycle/create | POST |
-| 认证 | 登录 | 用户登录 | auth.login/1.0 | POST |
-| 认证 | 登录 | 支付宝App登录 | auth.aliAppLogin/1.0 | POST |
-| 认证 | 验证码 | 发送验证码 | captcha.send/1.0 | POST |
+- **总接口数**: {N} 个
+- **模块总数**: {M} 个
+
+### 按业务方分类统计
+
+| 业务方 | 接口数量 |
+| ------ | -------- |
+| 商户网页 | XX 个 |
+| 员工网页 | XX 个 |
+| ... | ... |
+
+### 按模块统计
+
+| 模块 | 接口数量 |
+| ---- | -------- |
+| 订单模块 | XX 个 |
+| ... | ... |
+
+## 功能模块详情
+
+---
+
+### 订单模块 (XX 个接口)
+
+#### 员工网页 (XX 个接口)
+
+##### 订单管理 (XX 个接口)
+
+| 功能点 | 接口 | 方法 |
+| ------ | ---- | ---- |
+| 扫码登录 | /order/scan_login | ANY |
+| ... | ... | ... |
 ```
 
-## 第五步：输出摘要
+详细格式参见：[rules/PHP-LARAVEL-MODULAR.md](./rules/PHP-LARAVEL-MODULAR.md)
+
+---
+
+## 第四步：输出摘要
 
 完成后输出：
 - 检测到的项目类型
-- 模块数 / 功能组数 / 接口总数
-- 文件路径
+- 模块数 / 业务方数 / 功能组数 / 接口总数
+- PHP 模块化项目额外输出按业务方分类统计
+- 生成文件的路径

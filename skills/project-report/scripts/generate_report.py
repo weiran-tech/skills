@@ -16,7 +16,7 @@ Project Daily Report Generator
 import os
 import sys
 import yaml
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -36,6 +36,14 @@ def list_available_projects(project_root: Path) -> List[str]:
     if not config_dir.exists():
         return []
     return [f.stem for f in config_dir.glob('*.yaml')]
+
+
+def get_sls_threshold(project_config: Dict[str, Any]) -> int:
+    """获取 SLS threshold，从第一个 sls 条目读取，无则返回默认值 50"""
+    sls_config = project_config.get('sls', [])
+    if sls_config and len(sls_config) > 0 and 'sls_threshold' in (sls_config[0] or {}):
+        return sls_config[0].get('sls_threshold', 50)
+    return 50
 
 
 def get_enabled_content_types(project_config: Dict[str, Any],
@@ -60,95 +68,167 @@ def get_enabled_content_types(project_config: Dict[str, Any],
     return all_types
 
 
+def _get_local_tz():
+    """获取本地时区，优先读取 TZ 环境变量，无则默认 Asia/Shanghai (UTC+8)"""
+    tz_name = os.environ.get('TZ', '')
+    if not tz_name:
+        # macOS/Linux: 尝试从 /etc/timezone 或 /etc/localtime 推断
+        import subprocess
+        try:
+            result = subprocess.run(['systemsetup', '-gettimezone'], capture_output=True, text=True, timeout=5)
+            out = result.stdout.strip()
+            if 'Time Zone:' in out:
+                tz_name = out.split('Time Zone:')[-1].strip()
+        except Exception:
+            pass
+    if not tz_name:
+        tz_name = 'Asia/Shanghai'
+    # Python 3.9+: zoneinfo 可用；兼容旧版本用 fallback
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(tz_name)
+    except Exception:
+        # fallback: 固定偏移 UTC+8
+        return timezone(timedelta(hours=8))
+
+
 def generate_timestamp() -> str:
-    """生成时间戳 yyyy-mm-dd-hh-mm"""
-    return datetime.now().strftime('%Y-%m-%d-%H-%M')
+    """生成时间戳 mm-dd-hh-mm（使用时区感知的本地时间）"""
+    return datetime.now(_get_local_tz()).strftime('%m-%d-%H-%M')
 
 
 def build_report_content(project_name: str,
                          report_date: str,
-                         results: Dict[str, Any]) -> str:
-    """构建报告内容"""
-    lines = [f"# {project_name} - {report_date}\n"]
+                         results: Dict[str, Any]) -> Dict[str, str]:
+    """构建各类型报告内容，返回 {filename: content} 字典"""
+    reports: Dict[str, str] = {}
+    date_str = report_date
 
     # 线上故障
-    lines.append("## 线上故障\n")
-    if 'bugs' in results:
-        lines.append(results['bugs'])
-    else:
-        lines.append("（本次未采集）")
-    lines.append("\n")
+    if 'bugs' in results or 'bugs' not in results:
+        filename = "线上故障.md"
+        lines = [f"# {project_name} - {date_str} — 线上故障\n"]
+        if 'bugs' in results:
+            lines.append(results['bugs'])
+        else:
+            lines.append("（本次未采集）")
+        reports[filename] = "\n".join(lines)
 
-    # 技术需求
-    lines.append("## 技术需求\n")
-    if 'req' in results:
-        lines.append(results['req'])
-    else:
-        lines.append("（本次未采集）")
-    lines.append("\n")
+    # 需求统计
+    if 'req' in results or 'req' not in results:
+        filename = "需求统计.md"
+        lines = [f"# {project_name} - {date_str} — 需求统计\n"]
+        if 'req' in results:
+            lines.append(results['req'])
+        else:
+            lines.append("（本次未采集）")
+        reports[filename] = "\n".join(lines)
 
     # Sentry
-    lines.append("## Sentry\n")
-    if 'sentry' in results:
-        sentry_results = results['sentry']
-        for group_name, content in sentry_results.items():
-            lines.append(f"### {group_name}\n")
-            lines.append(content)
-            lines.append("\n")
-    else:
-        lines.append("（本次未采集）")
-    lines.append("\n")
+    if 'sentry' in results or 'sentry' not in results:
+        filename = "Sentry异常.md"
+        lines = [f"# {project_name} - {date_str} — Sentry\n"]
+        if 'sentry' in results:
+            sentry_results = results['sentry']
+            if sentry_results:
+                for group_name, content in sentry_results.items():
+                    lines.append(f"### {group_name}\n")
+                    lines.append(content)
+                    lines.append("\n")
+            else:
+                lines.append("（本次未采集）")
+        else:
+            lines.append("（本次未采集）")
+        reports[filename] = "\n".join(lines)
 
     # 接口高频统计
-    lines.append("## 接口高频统计\n")
-    if 'sls' in results:
-        sls_results = results['sls']
-        for host, content in sls_results.items():
-            lines.append(f"### {host}\n")
-            lines.append(content)
-            lines.append("\n")
-    else:
-        lines.append("（本次未采集）")
+    if 'sls' in results or 'sls' not in results:
+        filename = "高频接口.md"
+        lines = [f"# {project_name} - {date_str} — 接口高频统计\n"]
+        if 'sls' in results:
+            sls_results = results['sls']
+            if sls_results:
+                for name, content in sls_results.items():
+                    lines.append(f"### {name}\n")
+                    lines.append(content)
+                    lines.append("\n")
+            else:
+                lines.append("（本次未采集）")
+        else:
+            lines.append("（本次未采集）")
+        reports[filename] = "\n".join(lines)
 
-    return "\n".join(lines)
+    return reports
 
 
-def write_report(project_root: Path,
-                 project_name: str,
-                 content: str) -> str:
-    """写入报告文件，返回文件路径
+def ensure_output_dir(project_root: Path, project_name: str, ts: Optional[str] = None) -> Path:
+    """创建输出目录并返回目录路径。结构: qa/{project}/{MM-DD-HH-MM}/"""
+    if ts is None:
+        ts = generate_timestamp()
+    output_dir = project_root / 'qa' / project_name / ts
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
 
-    输出目录结构: report/temp/{project}/qa/{project}-{timestamp}.md
-    """
-    # 输出目录: report/temp/{project}/qa/
-    output_dir = project_root / 'report' / 'temp' / project_name / 'qa'
-    os.makedirs(output_dir, exist_ok=True)
 
-    timestamp = generate_timestamp()
-    filename = f"{project_name}-{timestamp}.md"
-    filepath = os.path.join(output_dir, filename)
-
+def write_report_file(output_dir: Path, filename: str, content: str) -> str:
+    """写入单个报告文件到输出目录，返回文件路径"""
+    filepath = output_dir / filename
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
-
-    return filepath
+    return str(filepath)
 
 
 def main():
-    """主函数：列出可用项目"""
+    """主函数：生成项目报告或列出可用项目"""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="项目日报生成器")
+    parser.add_argument('--project', type=str, help='项目名称')
+    parser.add_argument('--types', type=str, help='内容类型，逗号分隔 (bugs,req,sentry,sls)')
+    args = parser.parse_args()
+
     # 代码库根目录
-    project_root = Path(__file__).parents[5]
+    project_root = Path(__file__).parents[4]
 
-    # 打印可用的项目列表
-    projects = list_available_projects(project_root)
-    print("可用项目:")
-    for proj in sorted(projects):
-        config = load_project_config(project_root, proj)
-        enabled = "✓" if config and config.get('enabled', False) else "✗"
-        print(f"  {enabled} {proj}")
+    if args.project:
+        # 生成指定项目的报告
+        config = load_project_config(project_root, args.project)
+        if not config:
+            print(f"⚠️ 配置文件不存在: {project_root / 'config' / f'{args.project}.yaml'}")
+            return
 
-    if not projects:
-        print("\n  (无可用项目配置)")
+        ts = generate_timestamp()
+        report_date = datetime.now(_get_local_tz()).strftime('%Y-%m-%d')
+        output_dir = ensure_output_dir(project_root, args.project, ts)
+
+        results = {}
+        if config.get('online_fault'):
+            results['bugs'] = config['online_fault'].get('content', '')
+        if config.get('technical_req'):
+            results['req'] = config['technical_req'].get('content', '')
+        if config.get('sentry'):
+            results['sentry'] = config['sentry']
+        if config.get('api_frequency'):
+            results['sls'] = config['api_frequency']
+
+        reports = build_report_content(args.project, report_date, results)
+
+        for filename, content in reports.items():
+            filepath = write_report_file(output_dir, filename, content)
+            print(f"  ✓ {filename}")
+
+        print(f"\n报告路径: qa/{args.project}/{ts}/")
+    else:
+        # 打印可用的项目列表
+        projects = list_available_projects(project_root)
+        print("可用项目:")
+        for proj in sorted(projects):
+            config = load_project_config(project_root, proj)
+            enabled = "✓" if config and config.get('enabled', False) else "✗"
+            print(f"  {enabled} {proj}")
+
+        if not projects:
+            print("\n  (无可用项目配置)")
 
 
 if __name__ == '__main__':

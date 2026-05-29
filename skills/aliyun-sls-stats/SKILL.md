@@ -37,7 +37,7 @@ aliyun configure list
 | `--project`   | 是   | -            | SLS Project 名称                                              |
 | `--logstore`  | 是   | -            | SLS Logstore 名称                                             |
 | `--region`    | 否   | cn-hangzhou  | SLS 地域                                                      |
-| `--host`      | 否   | -            | Hostname 过滤条件                                             |
+| `--host`      | 否   | ''           | Hostname 过滤条件, 空参数不必进行透传                         |
 | `--format`    | 否   | nginx        | 日志格式：nginx / apisix / k8s-ingress / spring-boot / custom |
 | `--days`      | 否   | 7            | 统计天数                                                      |
 | `--threshold` | 否   | 50           | 帕累托分析阈值（%）                                           |

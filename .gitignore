@@ -38,3 +38,4 @@ build/
 
 ### CACHE ###
 __pycache__/
+README.local.md

@@ -1,128 +1,264 @@
 ---
 name: yunxiao-bug-stats
-description: 获取云效项目中「线上故障」类型工作项的统计数据。使用这个技能 whenever 用户需要统计线上故障数量，包括：(1) 当前未解决的线上故障总数；(2) 当前月份创建的线上故障总数；(3) 当前月份关闭的线上故障总数。Trigger this skill when the user asks for bug statistics, 故障统计, 线上故障统计, 获取这个项目中的 Bug 工作项, 统计 yiwan-judanyun.
+description: 获取云效项目中「线上故障」类型工作项的统计数据。使用分页优先模式，通过 advancedConditions 服务端过滤，直接取 pagination.total 提升性能，无需拉取全量数据。
 ---
 
 # 云效线上故障统计
 
 ## 参数
 
-<organization_id>: 云效组织ID, 从CLAUDE.md 上下文中获取
-<space_id>: 云效项目ID
-<yyyy_mm>: 统计月份, 默认是当前月份
+| 参数              | 说明                                                      | 必填 | 默认值   |
+| ----------------- | --------------------------------------------------------- | ---- | -------- |
+| `organization_id` | 云效组织ID（从 CLAUDE.md 上下文中获取）                   | 否   | -        |
+| `space_id`        | 云效项目ID                                                | 是   | -        |
+| `range`           | 创建/关闭的日期范围，自然语言解析如 `"昨天"`、`"最近7天"` | 否   | 本月至今 |
+
+## 固定常量
+
+以下 ID 为硬编码固定值，无需调用 API 动态获取：
+
+**工作项类型 : workitemType** 值定义
+| 状态     | ID                         |
+| -------- | -------------------------- |
+| 线上故障 | `bba77181ef64f834248a0175` |
+
+**状态阶段 : statusStage** 值定义：
+| 状态     | ID   |
+| -------- | ---- |
+| 确认阶段 | `1`  |
+| 分析阶段 | `6`  |
+| 处理阶段 | `2`  |
+| 设计阶段 | `7`  |
+| 开发阶段 | `11` |
+| 测试阶段 | `12` |
+| 验证阶段 | `3`  |
+| 发布阶段 | `13` |
+| 正常结束 | `4`  |
+| 异常结束 | `5`  |
+
+## advancedConditions 模板
+
+使用 `advancedConditions` 组合查询条件，直接从服务端获取统计数量, **注意**：advancedConditions 的值是 json 字符串, 并非 json 对象
+
+```json
+// 组合条件：AND 关系写在同一个 conditionGroups 数组内
+{"conditionGroups":[[
+    {"fieldIdentifier":"workitemType","..."},
+    {"fieldIdentifier":"statusStage","..."},
+    {"fieldIdentifier":"updateStatusAt","..."}
+]]}
+
+// condition : 限定工作项类型为线上故障
+{"fieldIdentifier":"workitemType","operator":"CONTAINS","value":["bba77181ef64f834248a0175"],"className":"workitemType","format":"list"}
+
+// 状态阶段组合
+{"fieldIdentifier":"statusStage","operator":"CONTAINS","value":["1"],"className":"statusStage","format":"list"}
+
+// condition : 创建时间日期范围查询 (BETWEEN)
+{"fieldIdentifier":"gmtCreate","operator":"BETWEEN","value":["<start_iso> 00:00:00"],"toValue":"<end_iso> 23:59:59","className":"dateTime","format":"input"}
+
+// condition : 状态变更时间日期范围查询 (BETWEEN)
+{"fieldIdentifier":"updateStatusAt","operator":"BETWEEN","value":["<start_iso> 00:00:00"],"toValue":"<end_iso> 23:59:59","className":"dateTime","format":"input"}
+```
 
 ## 功能
 
-输出三个统计值：
+输出三个维度的线上故障统计 + 未解决清单：
 
-1. **当前所有未解决线上故障数量** - 状态阶段处于：(确认阶段/分析阶段/处理阶段/设计阶段/开发阶段/测试阶段/验证阶段/发布阶段)
-2. **<yyyy_mm>创建的线上故障总数量** - 按创建时间筛选
-3. **<yyyy_mm>关闭的线上故障总数量** - 状态阶段处于(正常结束/异常结束)且状态更新于<yyyy_mm>
+1. **当前所有未解决的线上故障** 
+2. **当前时间范围内创建的线上故障总数** 
+3. **当前时间范围内关闭的线上故障总数** 
+4. **未解决故障详细清单** 
 
-输出问题清单：
-
-**⚠️ 必须按负责人分组展示所有未解决线上故障**
-
-## 核心输出要求（强制执行）
-
-1. 📋 **完整清单**：输出全部未解决故障问题，不遗漏
-2. 👤 **按负责人分组**：问题清单必须按负责人分组，每组显示该负责人的故障数量
-3. 🎯 **优先级可视化**：显示优先级 Emoji（🔴紧急/🟠高/🟡中/🟢低）
-4. ⚠️ **严重程度可视化**：显示严重程度 Emoji（💥致命/🔥严重/⚠️一般/📝轻微）
-5. 📊 **状态可视化**：显示状态 Emoji（❓待确认/🔧处理中/✅已修复/⏸️挂起中）
-6. 📈 **统计摘要**：底部必须包含状态统计摘要和优先级统计摘要
 
 ## 工作流
 
+### Step 0：交互式询问参数（单独调用时）
 
-### Step 0: 拉取所有线上项目
+当用户直接调用 `/yunxiao-bug-stats` 且未提供参数时，使用 `AskUserQuestion` 交互式询问：
 
-使用 `AskUserQuestion` 工具交互式询问用户以下参数：
+| 参数       | 说明     | 必填 | 默认值   | 询问方式                                                            |
+| ---------- | -------- | ---- | -------- | ------------------------------------------------------------------- |
+| `space_id` | 项目ID   | 是   | -        | 单选，先调用 `mcp__yunxiao__search_projects` 列出用户可见项目供选择 |
+| `range`    | 日期范围 | 否   | 本月至今 | 接受自然语言，如 `"昨天"`、`"最近7天"`、`"2026-05-01 - 2026-05-11"` |
 
-| 参数 | 说明 | 必填 | 默认值 | 询问方式 |
-|------|------|------|--------|----------|
-| `space_id` | 项目ID | 是 | - | 单选，列出用户可见的项目供选择 |
-| `yyyy_mm` | 统计月份 | 是 | - | 单选, 列出最近3个月的时间, 默认是当前月份, 格式是 <yyyy>-<mm> |
+> 注意：如果用户已在对话中明确了参数（如 `/yunxiao-bug-stats space_id=xxx`），跳过对应询问。
 
-**注意**：
-1. 先查询项目列表，让用户选择项目
-2. 选择项目后，查询该项目的所有标签供用户多选
-3. 标签筛选逻辑：包含任意一个选中的标签即匹配
-4. 如果用户已在对话中明确了参数，可以跳过对应询问
+### Step 1：解析日期范围
 
-**选择用户可见的项目**
-调用项目列表接口并显示给用户选择：
-
-```python
-mcp__yunxiao__search_projects(organizationId="<organization_id>")
-```
-
-
-### Step 1：拉取所有线上故障工作项
-
-使用 `mcp__yunxiao__search_workitems` 获取所有「线上故障」类型工作项：
-- `organizationId`: 组织ID
-- `category`: `Bug`
-- `spaceId`: 项目ID
-- `spaceType`: `Project`
-- `perPage`: `200`
-
-如需处理多页，检查返回的 `pagination.nextPage` 并循环调用直到所有数据获取完成。
-
-MCP 返回数据格式示例：
-```json
-{
-  "items": [
-    {
-      "id": "xxx",
-      "subject": "故障标题",
-      "status": {"id": "100005", "name": "待处理"},
-      "assignedTo": {"name": "张三"},
-      "workitemType": {"id": "bba77181ef64f834248a0175", "name": "线上故障"},
-      "gmtCreate": 1777019413000,
-      "updateStatusAt": 1777024760000,
-      "customFieldValues": [
-        {"fieldId": "priority", "fieldName": "优先级", "values": [{"displayValue": "中"}]},
-        {"fieldId": "seriousLevel", "fieldName": "严重程度", "values": [{"displayValue": "3-一般"}]}
-      ]
-    }
-  ]
-}
-```
-
-
-### Step 2：Python 统计分析
-
-直接调用 `scripts/stats.py` 进行统计分析（脚本已内置支持 MCP 数据格式）：
+使用 `scripts/stats.py` 中的 `parse_days()` 函数解析日期范围：
 
 ```bash
-uv run scripts/stats.py <json-file> <year> <month> [organization_id]
+uv run scripts/stats.py --parse-days "<range>"
 ```
 
-stats.py 读取工作项列表并统计：
-- 未解决：`status.id` 不在已关闭状态集合中
-- 创建于本月：`gmtCreate` 时间戳在指定月份范围内
-- 关闭于本月：`status.id` 在已关闭状态 且 `updateStatusAt` 时间戳在指定月份范围内
+返回格式：
+```json
+{"label": "5月", "start_iso": "2026-05-01", "end_iso": "2026-05-31"}
+```
+
+> Step 2-5 中的日期范围使用 `advancedConditions` 中的日期 BETWEEN 查询，无需使用 MCP 内置时间参数。
 
 ---
 
-### Step 3：提取未解决故障清单
+### Step 2：未解决线上故障数量
 
-从统计结果中提取未解决故障信息列表。工作项链接格式：
+查询条件: 
+- 工作项类型 : 线上故障
+- 状态阶段 : [确认阶段, 分析阶段, 处理阶段, 设计阶段, 开发阶段, 测试阶段, 验证阶段, 发布阶段]
 
 ```
-https://devops.aliyun.com/organization/<organization_id>/work/workitems/<identifier>
+mcp__yunxiao__search_workitems(
+    organizationId, spaceId, category: Bug, perPage: 1, includeDetails: false,
+    advancedConditions: '...'
+)
+→ pagination.total = 未解决线上故障总数
 ```
+
+**共 1 次 MCP 调用**
+
+### Step 3：范围内创建的线上故障数量
+
+查询条件: 
+- 工作项类型 : 线上故障
+- 创建时间日期范围查询 (BETWEEN)
+
+```
+mcp__yunxiao__search_workitems(
+    organizationId, spaceId: '<space_id>', category: Bug, perPage: 1, includeDetails: false,
+    advancedConditions: '...'
+)
+→ pagination.total = 范围内创建的线上故障总数
+```
+
+**共 1 次 MCP 调用**
+
+### Step 4：范围内关闭的线上故障数量
+
+查询条件: 
+- 工作项类型 : 线上故障
+- 状态阶段 : [正常结束 + 异常结束]
+- 状态变更时间日期范围查询 (BETWEEN)
+
+
+```
+mcp__yunxiao__search_workitems(
+    organizationId, spaceId: '<space_id>', category: Bug, perPage: 1, includeDetails: false,
+    advancedConditions: '...'
+)
+→ pagination.total = 范围内关闭的线上故障总数
+```
+
+**共 1 次 MCP 调用**
+
+### Step 5：未解决线上故障明细清单
+
+拉取一页数据用于展示清单, 查询条件: 
+- 工作项类型 : 线上故障
+- 状态阶段 : [确认阶段, 分析阶段, 处理阶段, 设计阶段, 开发阶段, 测试阶段, 验证阶段, 发布阶段]
+
+```
+mcp__yunxiao__search_workitems(
+    organizationId, spaceId: '<space_id>', category: Bug,
+    perPage: 200, includeDetails: true,
+    advancedConditions: '...'
+)
+```
+
+若 `total > 200`，仅展示第一页内的清单并注明范围限制。
+
+**共 1 次 MCP 调用**
+
+---
+
+### Step 6：组装数据并运行统计分析
+
+将 Step 2-5 的结果组装为 JSON 写入临时文件：
+
+```json
+{
+  "_counts": {
+    "total": N,
+    "unresolved": N,
+    "created": N,
+    "closed": N
+  },
+  "_items": [未解决故障明细列表]
+}
+```
+
+调用 stats.py：
+
+```bash
+uv run scripts/stats.py <json-file> "<label>" <organization_id>
+```
+
+stats.py 检测到 `_counts` 存在时进入**分页优先模式**，直接使用该字段作为统计来源。
+
+---
 
 ## 输出格式
 
-### ⚠️ 强制性要求：必须按负责人分组展示故障清单
+ALWAYS use this exact markdown table format：
 
-输出包含三部分：
-1. **基础统计表** - 显示三个核心统计数字
-2. **按负责人分组的故障清单（必须实现）**：
-   - 每个负责人单独成组，组标题显示 `👤 姓名（N 个故障）`
-   - 每组内使用 Markdown 表格展示，包含列：优先级、严重程度、状态、编号、标题、链接
-   - 每组按故障数量降序排列（故障多的负责人在前）
-   - 优先级、严重程度、状态三列必须带 Emoji 标识
-3. **状态统计摘要和优先级统计摘要** - 两个汇总表格
+```
+## 线上故障统计
+
+| 统计项                      | 数量  |
+| --------------------------- | ----- |
+| **当前所有未解决线上故障**  | **N** |
+| **`{label}`创建的线上故障** | **N** |
+| **`{label}`关闭的线上故障** | **N** |
+
+### 未解决故障清单（按负责人分组）
+
+#### 👤 负责人A（X 个故障）
+
+| 优先级 | 严重程度 | 状态     | 编号 | 标题 | 创建时间         | 链接        |
+| ------ | -------- | -------- | ---- | ---- | ---------------- | ----------- |
+| 🟡 中   | ⚠️ 一般   | 🔧 处理中 | xxx  | xxx  | 2026-05-12 10:30 | [查看](...) |
+
+#### ❌ 未分配（X 个故障）
+
+| 优先级 | 严重程度 | 状态     | 编号 | 标题 | 创建时间         | 链接        |
+| ------ | -------- | -------- | ---- | ---- | ---------------- | ----------- |
+| 🔴 紧急 | 💥 致命   | ❓ 待确认 | xxx  | xxx  | 2026-05-12 10:30 | [查看](...) |
+
+### 状态统计摘要
+
+| 状态     | 数量 |
+| -------- | ---- |
+| 🔧 处理中 | X    |
+| ❓ 待确认 | X    |
+
+### 优先级统计摘要
+
+| 优先级 | 数量 |
+| ------ | ---- |
+| 🔴 紧急 | X    |
+| 🟠 高   | X    |
+| 🟡 中   | X    |
+```
+
+#### Emoji 说明
+
+| 类型         | 标识 | 值            |
+| ------------ | ---- | ------------- |
+| **优先级**   | 🔴    | 紧急/最高     |
+|              | 🟠    | 高/较高       |
+|              | 🟡    | 中/普通       |
+|              | 🟢    | 低/较低       |
+| **严重程度** | 💥    | 致命          |
+|              | 🔥    | 严重          |
+|              | ⚠️    | 一般          |
+|              | 📝    | 轻微          |
+| **状态**     | ❓    | 待确认        |
+|              | 📋    | 待处理        |
+|              | 🔧    | 处理中/进行中 |
+|              | ✅    | 已修复/已解决 |
+|              | ⏸️    | 挂起中/暂停   |
+|              | 🔒    | 已关闭        |
+|              | 💻    | 开发中        |
+|              | 🧪    | 测试中        |
+|              | 🔍    | 验证中        |
+|              | 🚀    | 发布中        |
