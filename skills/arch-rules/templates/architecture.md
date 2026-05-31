@@ -35,6 +35,13 @@ Domain entities MUST contain behavior. MUST NOT create anemic models (data-only 
 - Prefer small functions (<30 lines), early return, avoid duplicated logic.
 - Avoid nesting deeper than 2 levels.
 
+## Mapper XML Safety Rules
+
+1. **WHERE required** — Every `SELECT`, `UPDATE`, `DELETE` MUST have a `WHERE` clause. No full-table operations.
+2. **LIMIT required** — Every `SELECT`, `UPDATE`, `DELETE` MUST have a `LIMIT`. Single-row operations use `limit 1`; list queries use a reasonable upper bound or parameterized limit; batch `DELETE` with `IN` clause uses `limit #{size}`.
+3. **Idempotent INSERT** — Use `INSERT IGNORE` when leveraging unique keys for idempotency.
+4. **Structure** — Define `<resultMap id="BaseResultMap">` and `<sql id="Base_Column_List">` in every mapper XML. Batch DELETE mapper method MUST accept `@Param("size") Integer size` for the parameterized limit.
+
 ## Development Workflow
 
 Before implementing non-trivial logic, briefly design domain behavior and abstractions.
