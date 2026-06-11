@@ -1,6 +1,6 @@
 ---
-name: arch-analyzer
-description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说 "arch-analyzer"、"分析服务架构"、"分析PHP架构"、"PHP模块分析"、"分析模块"、"analyze php architecture" 时触发。也适用于：用户想了解 PHP 模块功能边界、整理事件/监听器契约、为 AI 工具准备上下文文档、分析业务执行流程影响范围、或更新已有的模块架构文档。支持按模块单独分析以节约成本。
+name: php-analyzer
+description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说 "php-analyzer"、"分析服务架构"、"分析PHP架构"、"PHP模块分析"、"分析模块"、"analyze php architecture" 时触发。也适用于：用户想了解 PHP 模块功能边界、整理事件/监听器契约、为 AI 工具准备上下文文档、分析业务执行流程影响范围、或更新已有的模块架构文档。支持按模块单独分析以节约成本。
 ---
 
 # PHP Arch Analyzer
@@ -9,10 +9,10 @@ description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说
 
 | 文件 | 作用 | 参考指南 |
 |------|------|---------|
-| `docs/{module}/overview.md` | 模块名片：职责、目录结构、技术栈、依赖 | `references/overview-md.md` |
-| `docs/{module}/business.md` | 业务规则：为什么这么处理 | `references/business-md.md` |
-| `docs/{module}/contracts.md` | 对外契约：承诺了什么 | `references/contracts-md.md` |
-| `docs/{module}/flows.md` | 执行链路：怎么流转 | `references/flows-md.md` |
+| `docs/{service-name}/overview.md` | 模块名片：职责、目录结构、技术栈、依赖 | `references/overview-md.md` |
+| `docs/{service-name}/business.md` | 业务规则：为什么这么处理 | `references/business-md.md` |
+| `docs/{service-name}/contracts.md` | 对外契约：承诺了什么 | `references/contracts-md.md` |
+| `docs/{service-name}/flows.md` | 执行链路：怎么流转 | `references/flows-md.md` |
 
 另外生成一份跨模块关联文档：
 
@@ -38,7 +38,7 @@ description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说
 
 ### 模式一：单模块分析（默认 / 节约成本）
 
-用户指定某个模块名（如 `account`、`user`），只分析该模块，生成 `docs/{module}/` 下四份文档。
+用户指定某个模块名（如 `account`、`user`），只分析该模块，生成 `docs/{service-name}/` 下四份文档。
 
 ### 模式二：全量分析
 
@@ -59,7 +59,7 @@ description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说
 在生成任何文档之前，先建立对模块的全面认知。以下扫描并行执行：
 
 **目录结构：**
-- 扫描模块根目录 `modules/{module}/` 的目录层级（src、resources、configurations、tests）
+- 扫描模块根目录 `modules/{service-name}/` 的目录层级（src、resources、configurations、tests）
 - 识别模块内部分层：Action、Models、Events、Listeners、Jobs、Http、Classes、Commands、Hooks
 
 **路由扫描：**
@@ -121,10 +121,10 @@ description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说
 
 按以下顺序生成，每份文档读取对应的 reference 文件获取详细规则和模板：
 
-1. **docs/{module}/overview.md** → 读取 `references/overview-md.md`
-2. **docs/{module}/business.md** → 读取 `references/business-md.md`
-3. **docs/{module}/contracts.md** → 读取 `references/contracts-md.md`
-4. **docs/{module}/flows.md** → 读取 `references/flows-md.md`
+1. **docs/{service-name}/overview.md** → 读取 `references/overview-md.md`
+2. **docs/{service-name}/business.md** → 读取 `references/business-md.md`
+3. **docs/{service-name}/contracts.md** → 读取 `references/contracts-md.md`
+4. **docs/{service-name}/flows.md** → 读取 `references/flows-md.md`
 
 如果用户只要求生成某一份文档，只读取对应的 reference 文件即可。
 
