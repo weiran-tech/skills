@@ -4,6 +4,22 @@
 npx skills add weiran-tech/agent-skills --skill nuxt3-qa-analysis
 ```
 
+## 目录说明
+
+```
+├── bun         # bun 项目
+│   ├── bun-analyzer
+│   └── bun-rules
+├── java-ss     # Java 单独服务 Standalone Service
+├── php         # PHP 相关
+│   ├── api-scan
+│   ├── arch-analyzer
+│   ├── arch-rules
+│   ├── change-discuss
+│   └── dead-routes
+└── skills      # 后续要拆离
+```
+
 ## 清单说明
 
 ```
