@@ -22,9 +22,9 @@ description: 根据需求讨论文档生成可执行开发任务清单
 
 ### 更新文档
 
-任务整体开发并验收完毕后更新相关的设计文档 docs/{module}/[business|flows|overview|suggest].md 文件
+任务整体开发并验收完毕后更新相关的设计文档 docs/{service-name}/[business|flows|overview|suggest].md 文件
 
-- 读取 `docs/{module}/overview.md`, 确定影响模块
+- 读取 `docs/{service-name}/overview.md`, 确定影响模块
 - 确定需要更新的文档文件, 辅助更新内容
 
 ### 依赖关系
