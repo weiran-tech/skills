@@ -1,23 +1,23 @@
 ---
 name: php-rules
-description: 为 PHP/Laravel 伪多模块项目生成标准化的 Claude Code 规则文件（CLAUDE.md + .claude/rules/）。当用户说 "arch-rules"、"生成规则文件"、"生成PHP规则"、"PHP开发规范"、"init rules"、"init php rules"、"生成开发规范" 时触发。适用于：新项目初始化开发规范、统一团队 Claude Code 使用标准、为跨模块 Agent 协作准备仓库级规则。
+description: 为 PHP/Laravel 伪多模块项目生成标准化的 Claude Code 规则文件（CLAUDE.md + .claude/rules/）。当用户说 "php-rules"、"生成规则文件"、"生成PHP规则"、"PHP开发规范"、"init rules"、"init php rules"、"生成开发规范" 时触发。适用于：新项目初始化开发规范、统一团队 Claude Code 使用标准、为跨模块 Agent 协作准备仓库级规则。
 ---
 
 # PHP Arch Rules
 
 为当前 PHP/Laravel 伪多模块项目生成标准化的 Claude Code 规则文件。
 
-**定位**：只生成开发规范和操作指南，不分析业务逻辑和执行流程（业务分析由 php-arch-analyzer 负责）。
+**定位**：只生成开发规范和操作指南，不分析业务逻辑和执行流程（业务分析由 php-analyzer 负责）。
 
 ## 产出物
 
-| 文件 | 类型 | 来源 | 说明 |
-|------|------|------|------|
-| `CLAUDE.md` | 项目级 | 模板 + 扫描 | 纯入口导航（一句话职责 + 文档阅读顺序 + 规则索引） |
-| `.claude/rules/architecture.md` | 通用规则 | 模板直出 | 分层约束 + 编码标准 + 完成检查清单 |
-| `.claude/rules/module-map.md` | 项目特有 | docs 或扫描 | 模块速查表（命名空间、目录结构、职责） |
-| `.claude/rules/event-conventions.md` | 混合 | 模板 + 扫描 | Event/Listener 开发模板 + Job 队列规范 + 幂等约定 |
-| `.claude/rules/cross-module-guide.md` | 混合 | 模板 + 扫描 | 跨模块改动清单 + 引用约束 + 完成汇报格式 |
+| 文件                                  | 类型     | 来源        | 说明                                               |
+| ------------------------------------- | -------- | ----------- | -------------------------------------------------- |
+| `CLAUDE.md`                           | 项目级   | 模板 + 扫描 | 纯入口导航（一句话职责 + 文档阅读顺序 + 规则索引） |
+| `.claude/rules/architecture.md`       | 通用规则 | 模板直出    | 分层约束 + 编码标准 + 完成检查清单                 |
+| `.claude/rules/module-map.md`         | 项目特有 | docs 或扫描 | 模块速查表（命名空间、目录结构、职责）             |
+| `.claude/rules/event-conventions.md`  | 混合     | 模板 + 扫描 | Event/Listener 开发模板 + Job 队列规范 + 幂等约定  |
+| `.claude/rules/cross-module-guide.md` | 混合     | 模板 + 扫描 | 跨模块改动清单 + 引用约束 + 完成汇报格式           |
 
 ### 信息归属原则
 

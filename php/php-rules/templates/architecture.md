@@ -1,86 +1,86 @@
 ---
-description: Layered architecture constraints, design principles, coding standards, pre-completion checklist
+description: 分层架构约束、设计原则、编码规范、完工前自检清单
 ---
 
-# Architecture & Design Rules
+# 架构与设计规范
 
-## Layered Architecture
+## 分层架构
 
-The project follows a **Laravel pseudo-multi-module** architecture. All modules run within a single Laravel application and share the same database.
+项目采用 **Laravel 伪多模块**架构。所有模块运行在同一个 Laravel 应用内，共享同一套数据库。
 
-Dependency direction within each module: Http/Request → Action → Model → Event/Job
+各模块内部的依赖方向：Http/Request → Action → Model → Event/Job
 
-- **Http/Request layer**: Parameter validation and response formatting. MUST NOT contain business logic.
-- **Action layer**: Business logic orchestration (equivalent to Service layer). All business rules MUST live here.
-- **Model layer**: Eloquent models + relationships + Scopes + Accessor/Mutator. MUST NOT contain complex business logic. Simple attribute computation and state checks are acceptable.
-- **Event/Listener layer**: Domain event decoupling. Listeners MUST delegate to Action classes, MUST NOT contain complex business logic.
-- **Job layer**: Async tasks. The `handle()` method MUST delegate to Action classes. Jobs only handle parameter passing and retry configuration.
+- **Http/Request 层**：参数校验与响应格式化。**严禁**包含业务逻辑。
+- **Action 层**：业务逻辑编排（等价于 Service 层）。所有业务规则**必须**落在这一层。
+- **Model 层**：Eloquent 模型 + 关联关系 + Scope + Accessor/Mutator。**严禁**包含复杂业务逻辑。简单的属性计算和状态判定可以接受。
+- **Event/Listener 层**：领域事件解耦。Listener **必须**委托给 Action 类，**严禁**包含复杂业务逻辑。
+- **Job 层**：异步任务。`handle()` 方法**必须**委托给 Action 类。Job 只负责参数传递和重试配置。
 
-## Module Boundaries
+## 模块边界
 
-- Modules MAY `use` classes from other modules, but MUST follow the principle of minimal dependency.
-- Prefer referencing other modules' **Model** (read data) and **Action** (invoke business methods). MUST NOT reference other modules' **Request** classes.
-- When calling cross-module Action methods, only invoke public methods. MUST NOT depend on internal implementation details.
-- If module A's Listener needs to trigger module B's business logic, decouple via Event rather than direct invocation.
+- 模块**可以** `use` 其他模块的类，但必须遵守**最小依赖**原则。
+- 跨模块引用时，优先引用对方的 **Model**（读取数据）和 **Action**（调用业务方法）。**严禁**引用其他模块的 **Request** 类。
+- 调用跨模块 Action 方法时，只能调用其 public 方法。**严禁**依赖内部实现细节。
+- 若模块 A 的 Listener 需要触发模块 B 的业务逻辑，应通过 Event 解耦，而非直接调用。
 
-## Directory Convention
+## 目录约定
 
-Each module lives under `modules/{module}/` with a standard layout. The exact subdirectories vary by project, but the layering principle is fixed:
+每个模块位于 `modules/{模块}/` 下，使用标准布局。具体的子目录因项目而异，但分层原则固定不变：
 
-| Layer | Typical directory | Responsibility |
-|-------|------------------|----------------|
-| Entry point | `src/ServiceProvider.php` | Module registration (routes, events, commands) |
-| HTTP | `src/Http/Request/`, `src/Http/Routes/` | Parameter validation, routing, response formatting |
-| Business logic | `src/Action/` | Core business rules (the ONLY place for business logic) |
-| Domain model | `src/Models/` | Eloquent models, relationships, scopes |
-| Events | `src/Events/`, `src/Listeners/` | Domain event definitions and handlers |
-| Async | `src/Jobs/` | Queued tasks |
-| CLI | `src/Commands/` | Artisan commands |
-| Utilities | `src/Classes/` | Helpers, constants, third-party wrappers |
-| Resources | `resources/` | Migrations, views, lang files |
-| Tests | `tests/` | Test cases |
+| 层       | 典型目录                                | 职责                                 |
+| -------- | --------------------------------------- | ------------------------------------ |
+| 入口     | `src/ServiceProvider.php`               | 模块注册（路由、事件、命令）         |
+| HTTP     | `src/Http/Request/`、`src/Http/Routes/` | 参数校验、路由、响应格式化           |
+| 业务逻辑 | `src/Action/`                           | 核心业务规则（业务逻辑**唯一**落点） |
+| 领域模型 | `src/Models/`                           | Eloquent 模型、关联关系、Scope       |
+| 事件     | `src/Events/`、`src/Listeners/`         | 领域事件定义与处理器                 |
+| 异步     | `src/Jobs/`                             | 队列任务                             |
+| 命令行   | `src/Commands/`                         | Artisan 命令                         |
+| 工具     | `src/Classes/`                          | 辅助类、常量、第三方封装             |
+| 资源     | `resources/`                            | 迁移、视图、语言包                   |
+| 测试     | `tests/`                                | 测试用例                             |
 
-New files MUST be placed in the existing directory that matches their layer. MUST NOT create new subdirectories under `src/` without strong justification. When in doubt, scan the module's current structure first.
+新增文件**必须**放入与所属层匹配的现有目录。未经充分论证，**严禁**在 `src/` 下新建子目录。拿不准时，先扫一遍当前模块的结构。
 
-## Design Rules (MUST follow)
+## 设计原则（必须遵守）
 
-- MUST NOT use `array` as data contract between components. Use explicit DTO classes, Value Objects, or typed class properties. Plain arrays are unmaintainable — no IDE completion, no type safety, no documentation.
-- MUST NOT pass data between components using generic key-value structures (`array`, `Collection` used as map, `stdClass`). Use explicit, named types.
-- Single Responsibility: each class MUST have one and only one reason to change.
-- Depend on abstractions, not implementations.
-- MUST NOT navigate deep object graphs (Law of Demeter). Only talk to direct collaborators.
-- If a conditional branch has more than 2 cases, MUST introduce polymorphism (Strategy pattern, match expression, or enum-based dispatch).
-- MUST NOT use utility classes for business logic.
-- MUST NOT use `instanceof` / type checking for behavior dispatch. Use polymorphism instead.
+- **严禁**用 `array` 作为组件间的数据契约。应使用显式的 DTO 类、值对象，或带类型的类属性。裸数组难以维护——没有 IDE 补全、没有类型安全、没有文档。
+- **严禁**使用泛型键值结构（`array`、当 map 用的 `Collection`、`stdClass`）在组件间传递数据。应使用显式的、具名的类型。
+- 单一职责：每个类**必须**只有一个且仅有一个变更原因。
+- 依赖抽象，而非具体实现。
+- **严禁**深层次遍历对象图（迪米特法则）。只与直接协作者打交道。
+- 若条件分支的 case 超过 2 个，**必须**引入多态（策略模式、match 表达式，或基于 enum 的分发）。
+- **严禁**用工具类承载业务逻辑。
+- **严禁**使用 `instanceof` 或类型检查来做行为分发。应使用多态。
 
-## Clean Code
+## 整洁代码
 
-- Prefer small functions (<30 lines), early return, avoid duplicated logic.
-- Avoid nesting deeper than 2 levels.
+- 优先编写小函数（<30 行）、早返回、避免重复逻辑。
+- 避免超过 2 层的嵌套。
 
-## Coding Standards
+## 编码规范
 
-- Database queries MUST avoid N+1 problems. Use `with()` for eager loading.
-- Monetary calculations MUST use `bcmath` functions (`bcadd`, `bcmul`, etc.). MUST NOT use float arithmetic.
-- Date/time MUST use Carbon. MUST NOT use `date()` or `strtotime()` directly.
-- User input MUST go through Eloquent parameter binding or Query Builder parameterized queries. MUST NOT concatenate strings into SQL.
+- 数据库查询**必须**避免 N+1 问题。使用 `with()` 进行预加载。
+- 金额计算**必须**使用 `bcmath` 函数（`bcadd`、`bcmul` 等）。**严禁**使用浮点运算。
+- 日期/时间**必须**使用 Carbon。**严禁**直接使用 `date()` 或 `strtotime()`。
+- 用户输入**必须**走 Eloquent 参数绑定或 Query Builder 参数化查询。**严禁**拼接字符串到 SQL。
 
-## Database Safety
+## 数据库安全
 
-- Every `UPDATE` and `DELETE` MUST have a `WHERE` clause. No full-table operations.
-- Batch `DELETE` MUST have a `LIMIT` to prevent table locking.
+- 每条 `UPDATE` 和 `DELETE` **必须**带 `WHERE` 子句。禁止全表操作。
+- 批量 `DELETE` **必须**带 `LIMIT`，防止表锁。
 
-## Pre-completion Checklist
+## 完工前自检清单
 
-Before reporting any task as done, MUST verify:
+在将任何任务标记为完成之前，**必须**逐项核验：
 
-- [ ] No `array` used as data contract between components
-- [ ] No direct coupling between modules (no Request/Listener/Middleware cross-references)
-- [ ] No Law of Demeter violations (no deep object navigation)
-- [ ] Each class has single responsibility
-- [ ] Conditional branches > 2 cases use polymorphism, not if/else chains
-- [ ] No utility classes containing business logic
-- [ ] No N+1 query problems
-- [ ] Monetary calculations use bcmath
-- [ ] UPDATE/DELETE have WHERE clause
-- [ ] New files in correct directory
+- [ ] 组件间没有使用 `array` 作为数据契约
+- [ ] 模块之间没有直接耦合（没有跨模块引用 Request/Listener/Middleware）
+- [ ] 没有违反迪米特法则（没有深层次的对象导航）
+- [ ] 每个类职责单一
+- [ ] 超过 2 个 case 的条件分支使用了多态，而非 if/else 链
+- [ ] 工具类中不包含业务逻辑
+- [ ] 没有 N+1 查询问题
+- [ ] 金额计算使用 bcmath
+- [ ] UPDATE/DELETE 都带有 WHERE 子句
+- [ ] 新文件放在正确的目录下
