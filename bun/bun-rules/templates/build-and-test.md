@@ -53,16 +53,7 @@ test("hello world", () => {
 ```bash
 # 运行全部测试, 会查找 [test/tests] 目录下的测试文件 { *.[test|spec].ts[x]}
 bun test
+
+# 单元测试覆盖率
+bun test --coverage
 ```
-
-
-## Verify
-
-```bash
-# 检查编译是否通过（不跑测试）
-mvn compile -DskipTests
-
-# 检查是否有依赖冲突
-mvn dependency:tree -pl {module-name}
-```
-
