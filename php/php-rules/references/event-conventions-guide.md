@@ -96,7 +96,7 @@ class XxxListener
 在模块的 `ServiceProvider.php` 中注册 Event → Listener 映射：
 
 ```php
-protected $listen = [
+protected $listens = [
     XxxEvent::class => [
         XxxListener::class,
     ],

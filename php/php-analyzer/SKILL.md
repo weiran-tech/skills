@@ -78,7 +78,7 @@ description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说
 **事件/监听器扫描：**
 - 扫描 `src/Events/` 目录，记录所有事件类及其携带的数据
 - 扫描 `src/Listeners/` 目录，记录每个监听器：监听的事件、执行的业务逻辑
-- 检查 `ServiceProvider` 中的 `$listen` 属性或 `EventServiceProvider` 获取事件-监听器绑定
+- 检查 `ServiceProvider` 中的 `$listens` 属性或 `EventServiceProvider` 获取事件-监听器绑定
 - **事件级联追踪**：对每个监听器，沿调用链（Listener → Action/Service → Model）向下追踪，检查是否有 `event()` 调用或 Job dispatch。记录该 Listener 处理过程中产生的所有下游事件/任务
 
 **队列任务扫描：**
@@ -161,7 +161,6 @@ description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说
 
 - 本项目是 Laravel 伪多模块结构，所有模块在同一个 Laravel 应用中运行，共享数据库
 - 模块间可以直接 `use` 其他模块的类，这是跨模块耦合的主要形式
-- `weiran/framework` 是底层框架包，提供模块化支持，不需要分析
-- `modules/misc` 通常是工具/杂项模块，包含第三方 SDK 封装等
+- `vendor` 目录是项目依赖包，不需要分析
 - 每个模块的 `ServiceProvider` 是模块入口，注册路由、事件、命令等
 - Action 层等同于 Java 项目中的 Service 层
