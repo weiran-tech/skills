@@ -22,9 +22,8 @@ description: 项目模块速查，帮助快速定位代码位置和模块职责
 
 ```json
 {
-  "App\\": "modules/app/src",
-  "Game\\": "modules/game/src",
-  "Account\\": "modules/account/src"
+    "Game\\": "modules/game/src",
+    "Account\\": "modules/account/src"
 }
 ```
 
@@ -38,13 +37,15 @@ description: 项目模块速查，帮助快速定位代码位置和模块职责
 
 优先从 `docs/cross-module.md` 的"模块依赖矩阵"提取。
 
-如果 docs 不存在，标注"待确认——请先运行 php-analyzer 生成文档"。
+如果 docs 不存在，标注"待确认——请先运行 `/php-analyzer` 生成文档"。
 
 ### 4. 获取技术栈
 
 从 `composer.json` 提取：
+
 - `require.php` → PHP 版本
 - `require.laravel/framework` → Laravel 版本
+- `require.{poppy,weiran}/framework` → {poppy/weiran} 框架 和版本
 - 其他关键依赖
 
 ## 输出格式
@@ -59,7 +60,7 @@ description: 项目模块速查，帮助快速定位代码位置和模块职责
 ## 项目信息
 
 - 项目名：{从 composer.json 的 name 字段}
-- 框架：Laravel {版本} + weiran/framework
+- 框架：Laravel {版本} + {poppy,weiran}/framework {poppy/weiran framework 版本}
 - PHP：{版本}
 - 模块数：{N}
 
@@ -75,19 +76,47 @@ description: 项目模块速查，帮助快速定位代码位置和模块职责
 
 要找什么 → 去哪里：
 
-| 要找           | 路径模式                                     | 说明                            |
-| -------------- | -------------------------------------------- | ------------------------------- |
-| API 接口处理   | `modules/{module}/src/Http/Request/Api/`     | 面向前端的请求处理类            |
-| 后台接口处理   | `modules/{module}/src/Http/Request/Backend/` | 管理后台请求处理类              |
-| 业务逻辑       | `modules/{module}/src/Action/`               | 核心业务逻辑（等同 Service 层） |
-| 数据模型       | `modules/{module}/src/Models/`               | Eloquent 模型                   |
-| 事件定义       | `modules/{module}/src/Events/`               | 领域事件                        |
-| 事件监听       | `modules/{module}/src/Listeners/`            | 事件处理                        |
-| 队列任务       | `modules/{module}/src/Jobs/`                 | 异步任务                        |
-| 路由定义       | `modules/{module}/src/Http/Routes/`          | 路由文件                        |
-| Artisan 命令   | `modules/{module}/src/Commands/`             | CLI 命令                        |
-| 工具类/SDK封装 | `modules/{module}/src/Classes/`              | 工具和第三方封装                |
-| 数据库迁移     | `modules/{module}/resources/migrations/`     | Migration 文件                  |
+`[<X>/]` 表示可选子目录，按下方「子目录判定规则」决定是否建立。
+
+| 类别              | 路径（命名）                                                                        | 备注                   |
+|-----------------|-------------------------------------------------------------------------------|----------------------|
+| **核心层**         |                                                                               |                      |
+| 业务逻辑            | `src/Action/`（`Act{Service}.php`）                                             | 业务逻辑唯一落点             |
+| 数据模型            | `src/Models/`（`<Table>.php`，大驼峰与表名一致）                                         | Eloquent 模型 + 关联     |
+| 模型 DAO          | `src/Models/Dao/`（`<Model>Dao.php`）                                           | 复杂查询封装               |
+| 模型 Filter       | `src/Models/Filters/`（`<Model>Filter.php`）                                    | 查询过滤器                |
+| 模型 Resource     | `src/Models/Resources/`（`<Model>Resource.php`）                                | API 资源转换             |
+| 模型 Policy       | `src/Models/Policies/`（`<Model>Policy.php`）                                   | Laravel Policies     |
+| **事件层**         |                                                                               |                      |
+| 领域事件            | `src/Events/`（`<Domain>Event.php`）                                            | 过去式或动作名词             |
+| 事件监听器           | `src/Listeners/<Domain>/`（`<Verb>Listener.php`）                               | 必带业务域子目录（按 Event 域）  |
+| 队列任务            | `src/Jobs/`（`<Verb>Job.php`）                                                  | `handle()` 委托 Action |
+| **HTTP 层**      |                                                                               |                      |
+| 控制器（前端 API）     | `src/Http/[Request/]Api/`（`<Fun>Controller.php` + `<Fun>/<Fun>XxRequest.php`） | 面向前端 API             |
+| 控制器（后台）         | `src/Http/[Request/]Backend/`（同前端 API 命名）                                     | 管理后台                 |
+| 控制器（商户/工作台）     | `src/Http/[Request/]Web/`（同前端 API 命名）                                         | 商户/客服工作台             |
+| 路由              | `src/Http/Routes/`（`api.php` / `web.php` / `backend.php`）                     | 与 HTTP 层一一对应         |
+| 中间件             | `src/Http/Middleware/`（`<Affect>Middleware.php`）                              |                      |
+| **支撑层**         |                                                                               |                      |
+| 工具类 / SDK 封装    | `src/Classes/`                                                                | 见下方「Def/Enum 决策」     |
+| Traits          | `src/Classes/Traits/`（`<Function>Trait.php`）                                  |                      |
+| Auth 相关         | `src/Classes/Auth/`                                                           |                      |
+| 通知              | `src/Notifications/`（`<Affect>Notification.php`）                              |                      |
+| 命令              | `src/Commands/`（`<Function>Command.php`）                                      | Cli命令                |
+| 钩子              | `src/Hooks/`                                                                  | 业务钩子                 |
+| **模块入口**        |                                                                               |                      |
+| ServiceProvider | `src/ServiceProvider.php`                                                     | 路由/事件/命令注册           |
+| **资源**          |                                                                               |                      |
+| 数据库迁移           | `resources/migrations/`（Laravel 迁移文件）                                         |                      |
+| 多语言             | `resources/lang/<lang>/`                                                      |                      |
+| 视图              | `resources/views/{backend,web,...}/`                                          |                      |
+| **配置**          |                                                                               |                      |
+| 权限定义            | `configurations/permissions.yaml`                                             |                      |
+| 菜单定义            | `configurations/menus.yaml`                                                   |                      |
+| 服务定义            | `configurations/services.yaml`                                                |                      |
+| 服务钩子            | `configurations/hooks.yaml`                                                   |                      |
+| **测试**          |                                                                               |                      |
+| 单元测试            | `tests/`                                                                      |                      |
 
 {注：以上为通用路径模式，具体模块可能不包含所有目录。实际存在的目录以各模块 overview.md 的"目录结构"为准。}
 
@@ -100,6 +129,8 @@ description: 项目模块速查，帮助快速定位代码位置和模块职责
 | {module_a} → {module_b} | Model引用 / Action调用 |
 | ...                     |                        |
 ```
+
+
 
 ## 注意事项
 
