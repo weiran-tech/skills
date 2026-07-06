@@ -1,7 +1,7 @@
 # 命令处理逻辑
 
 > **统一解析规则**：`next` / `approve` / `status` / `rework` 在确定作用目标（需求/里程碑）时，省略参数一律按「活动上下文」优先级解析
-> **显式参数 > 活动指针 (`docs/.req-discuss/.workflow-active`) > 旧回退规则**（唯一进行中的自动选中；多个列出让选；无则提示 start）。显式传参不改变活动指针；要持久切换用 `use`。所有解析支持前缀/子串模糊匹配，唯一即定位，多个则列出让选。
+> **显式参数 > 活动指针 (`docs/discuss/.workflow-active`) > 旧回退规则**（唯一进行中的自动选中；多个列出让选；无则提示 start）。显式传参不改变活动指针；要持久切换用 `use`。所有解析支持前缀/子串模糊匹配，唯一即定位，多个则列出让选。
 >
 > **里程碑「粘住」（关键，避免每步重复敲 `#`）**：活动指针应尽量带里程碑（`{需求ID}#里程碑`）。若指针**只有需求而该需求是多里程碑**：
 > 1. `next`/`approve` 解析里程碑时——唯一进行中的里程碑 → 自动选中；多个 → 列出让选。
@@ -16,17 +16,17 @@
    - 只传 `#里程碑`（无需求名）→ 沿用当前活动指针的需求，仅切换里程碑
    - 不传任何参数 → 显示当前活动上下文（不修改）
 2. 校验解析结果存在（需求目录/里程碑存在）；匹配到多个则列出让用户选
-3. 把完整 `{需求ID}[#里程碑]` 写入 `docs/.req-discuss/.workflow-active`（覆盖）
+3. 把完整 `{需求ID}[#里程碑]` 写入 `docs/discuss/.workflow-active`（覆盖）
 4. 回显：`当前活动: {需求ID}[#里程碑] — 阶段 {n}/5 {状态}`，并提示可直接 `/php-workflow next` / `approve` / `status`
 
 > 切到别的需求/里程碑就再 `use` 一次；活动指针指向的目标 COMPLETED 后，由 `next`/`status` 提示重新 `use`（若只剩唯一进行中的，自动改指它）。
 
 ## `/php-workflow start {需求名}`
 1. 询问用户需求所属的**业务域/模块**（从 `composer.json` 的 `autoload.psr-4` 或 `modules/` 目录读取本项目实际模块），或从需求描述中推断
-2. 检查 `docs/.req-discuss/{域}/{需求名}.md` 是否已存在，存在则提示用户是否要基于已有讨论继续
-3. 调用 `/req-discuss` skill，传入需求名作为讨论主题
+2. 检查 `docs/discuss/{域}/{需求名}.md` 是否已存在，存在则提示用户是否要基于已有讨论继续
+3. 调用 `/discuss` skill，传入需求名作为讨论主题
 4. 讨论完成并保存后，创建 `.task/progress.md`（模板见 templates.md），状态设为 `ANALYZING`
-5. **把该需求设为活动上下文**（写入 `docs/.req-discuss/.workflow-active`）
+5. **把该需求设为活动上下文**（写入 `docs/discuss/.workflow-active`）
 6. 提示用户可用 `/php-workflow next` 进入分析与设计阶段（无需再带 ID）
 
 **执行**：`/req-discuss "{需求名}：{用户提供的需求描述}"`
@@ -39,7 +39,7 @@
 4. 创建目录 `.task/milestones/{里程碑名}/`（各含 analysis/ done/ review/ 空目录占位）
 5. 若需求已有单里程碑产出（analysis/ 等），按里程碑归位到对应 `milestones/{里程碑名}/`，公共部分留在 `.task/` 根
 6. 重写 progress.md 为**多里程碑**结构（见 templates.md）
-7. **把活动上下文设为应先做的里程碑**（有公共基础则指向它，写入 `docs/.req-discuss/.workflow-active`）
+7. **把活动上下文设为应先做的里程碑**（有公共基础则指向它，写入 `docs/discuss/.workflow-active`）
 8. 提示用户后续用 `/php-workflow use #{里程碑}` 切换、`/php-workflow next` 推进（有依赖的里程碑须等前置就绪）
 
 > 拆分是不可省的显式操作：未执行 split 的需求一律按单里程碑处理。已拆分的需求不支持自动合并回单里程碑（如需回退，手工整理目录后改 progress.md）。
@@ -80,7 +80,7 @@
 
 ## `/php-workflow status [需求ID][#里程碑]`
 - **不指定需求 ID 且有活动上下文**：顶部高亮显示当前活动（`▶ 活动: {需求ID}[#里程碑]`），并展示其详细进度
-- **不指定需求 ID 且无活动上下文**：扫描 `docs/.req-discuss/` 下所有 `.task/progress.md`，汇总显示
+- **不指定需求 ID 且无活动上下文**：扫描 `docs/discuss/` 下所有 `.task/progress.md`，汇总显示
 - **指定需求 ID、不带 `#里程碑`**：单里程碑显示该需求详细进度；多里程碑显示完整里程碑进度表
 - **指定 `#里程碑`**：只显示该里程碑的阶段记录与任务清单
 
@@ -103,7 +103,7 @@
 ```
 
 ## `/php-workflow list`
-扫描 `docs/.req-discuss/` 下所有 `.task/progress.md`，只显示**未完成**的需求（状态不是 COMPLETED）。多里程碑需求在条目下附各里程碑一行简况。
+扫描 `docs/discuss/` 下所有 `.task/progress.md`，只显示**未完成**的需求（状态不是 COMPLETED）。多里程碑需求在条目下附各里程碑一行简况。
 
 ## `/php-workflow rework [需求ID][#里程碑]`
 设计/实现缺陷返工 —— **详见 rework.md**。

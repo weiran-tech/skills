@@ -2,7 +2,7 @@
 
 module-map.md 是模块速查表，让 agent 快速定位"我要改的东西在哪个模块"。
 
-**数据来源优先级**：`docs/` > `composer.json`，不做文件数量统计扫描。
+**数据来源优先级**：`docs/workflow/` > `composer.json`，不做文件数量统计扫描。
 
 ## frontmatter
 
@@ -29,13 +29,13 @@ description: 项目模块速查，帮助快速定位代码位置和模块职责
 
 ### 2. 获取模块职责
 
-优先从 `docs/{module}/overview.md` 的"模块职责"段落提取一句话描述。
+优先从 `docs/workflow/{module}/overview.md` 的"模块职责"段落提取一句话描述。
 
 如果 docs 不存在，从模块名推断（account → 账号/交易、user → 用户/店铺、game → 游戏），标注"待确认"。
 
 ### 3. 获取跨模块引用方向
 
-优先从 `docs/cross-module.md` 的"模块依赖矩阵"提取。
+优先从 `docs/workflow/cross-module.md` 的"模块依赖矩阵"提取。
 
 如果 docs 不存在，标注"待确认——请先运行 `/php-analyzer` 生成文档"。
 
@@ -68,8 +68,8 @@ description: 项目模块速查，帮助快速定位代码位置和模块职责
 
 | 模块    | 命名空间 | 目录            | 职责                               |
 | ------- | -------- | --------------- | ---------------------------------- |
-| account | Account\ | modules/account | {从 docs/account/overview.md 提取} |
-| user    | User\    | modules/user    | {从 docs/user/overview.md 提取}    |
+| account | Account\ | modules/account | {从 docs/workflow/account/overview.md 提取} |
+| user    | User\    | modules/user    | {从 docs/workflow/user/overview.md 提取}    |
 | ...     |          |                 |                                    |
 
 ## 模块目录速查
@@ -122,7 +122,7 @@ description: 项目模块速查，帮助快速定位代码位置和模块职责
 
 ## 跨模块引用方向
 
-{从 docs/cross-module.md 提取，如果不存在则标注"待确认"}
+{从 docs/workflow/cross-module.md 提取，如果不存在则标注"待确认"}
 
 | 引用方 → 被引用方       | 主要引用类型           |
 | ----------------------- | ---------------------- |

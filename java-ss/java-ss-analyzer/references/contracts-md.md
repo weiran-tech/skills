@@ -1,4 +1,4 @@
-# docs/contracts.md 生成指南
+#contracts.md 生成指南
 
 contracts.md 记录所有跨服务的交互契约。这是其他服务负责人最需要查阅的文档。
 

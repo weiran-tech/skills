@@ -16,9 +16,9 @@
 ```
 分析与设计已完成，等待人工审核（清单式）。
 
-设计文档: docs/.req-discuss/{域}/{需求名}/.task/design-consensus.md
-任务拆分: docs/.req-discuss/{域}/{需求名}/.task/dev-tasks.md
-{如有冲突} 冲突记录: docs/.req-discuss/{域}/{需求名}/.task/conflicts.md
+设计文档: docs/discuss/{域}/{需求名}/.task/design-consensus.md
+任务拆分: docs/discuss/{域}/{需求名}/.task/dev-tasks.md
+{如有冲突} 冲突记录: docs/discuss/{域}/{需求名}/.task/conflicts.md
 
 主 Agent 自查结论: {逐项 ✓/✗ + 缺项说明}
 未决项: {N 条，处置摘要}

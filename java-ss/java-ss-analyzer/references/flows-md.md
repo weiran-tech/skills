@@ -1,4 +1,4 @@
-# docs/flows.md 生成指南
+# flows.md 生成指南
 
 flows.md 是文档中对跨服务协作最有价值的一份。它回答的问题是：
 

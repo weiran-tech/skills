@@ -1,19 +1,18 @@
 ---
-name: req-userstory
-description: 根据服务流程/约定限制生成用户故事
+name : req-userstory
+description : 根据服务流程/约定限制生成用户故事
 ---
 
 # 生成用户故事
 
-本文根据 `docs/{service}/*.md`，描述当前服务的的用户目标、业务价值与验收标准
-
+本文根据 `docs/workflow/{service}/*.md`，描述当前服务的的用户目标、业务价值与验收标准
 
 ## 分析内容
 
 ### 分析流程
 
 - 确认 `{service}` 模块, 如果没有指定, 需要用户进行指定, 否则不予继续
-- 读取 `docs/{service}/[*].md`, 确定影响模块, 读取内容不包含 `userstory.md`
+- 读取 `docs/workflow/{service}/[*].md`, 确定影响模块, 读取内容不包含 `userstory.md`
 - 根据读取到的内容，分析用户目标、业务价值与验收标准
 - 生成用户故事, 如果存在 userstory.md 文件, 读取文件内容, 并和当前的分析结果合并, 生成新的完整用户故事文件
 
@@ -53,7 +52,6 @@ description: 根据服务流程/约定限制生成用户故事
 ### US-1.2 {用户故事2}
 
 ...
-
 
 ## 待确认用户故事
 

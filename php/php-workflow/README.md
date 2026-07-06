@@ -2,7 +2,7 @@
 
 状态机驱动的开发流程 skill。把"需求讨论 → 分析设计 → 开发 → 审查 → 验收"串成一个统一入口，用 `progress.md` 记录状态，每次 `/php-workflow next` 自动决定下一步调度哪个 agent、传什么参数。
 
-面向伪多模块单体项目：代码都在同一仓库 `modules/{模块}` 下，跨模块走 Events/Listeners + Service，审查按模块路径过滤 diff，架构上下文取自 `docs/{module}/`（php-analyzer 产出）。测试/校验等具体命令默认按 PHP 工具链（phpunit / php -l），可按项目配置替换。
+面向伪多模块单体项目：代码都在同一仓库 `modules/{模块}` 下，跨模块走 Events/Listeners + Service，审查按模块路径过滤 diff，架构上下文取自 `docs/workflow/{module}/`（php-analyzer 产出）。测试/校验等具体命令默认按 PHP 工具链（phpunit / php -l），可按项目配置替换。
 
 ---
 
@@ -23,7 +23,7 @@
 
 ```
   阶段1 需求讨论        /php-workflow start  → req-discuss 多轮对话
-     │ (产出 docs/.req-discuss/{域}/{需求名}.md)
+     │ (产出 docs/discuss/{域}/{需求名}.md)
      ▼
   阶段2 分析与设计      /php-workflow next   → analyst 逐模块分析 + ralph 汇总设计
      │ (产出 analysis/、design-consensus.md[必含清单]、dev-tasks.md)
@@ -118,9 +118,9 @@ TODO
 | `/php-workflow rework [需求ID][#里程碑]`    | 设计/实现缺陷返工                                               |
 | `/php-workflow summary [需求ID][#里程碑]`   | 产出交付清单（DDL / Job·MQ / API）给 DBA 与前端，验收通过后执行 |
 
-- **需求 ID** = `{域}/{需求名}`（如 `order/订单取消优化`），与 `docs/.req-discuss/` 目录一致
+- **需求 ID** = `{域}/{需求名}`（如 `order/订单取消优化`），与 `docs/discuss/` 目录一致
 - **`#里程碑`** 仅多里程碑需求需要（如 `payment/支付渠道重构#alipay`）
-- **活动上下文（推荐）**：`/php-workflow use` 选一次当前在搞的需求/里程碑（存于 `docs/.req-discuss/.workflow-active`），之后 `next/approve/status/rework` 省略参数即默认指向它，不必每步重复敲长 ID
+- **活动上下文（推荐）**：`/php-workflow use` 选一次当前在搞的需求/里程碑（存于 `docs/discuss/.workflow-active`），之后 `next/approve/status/rework` 省略参数即默认指向它，不必每步重复敲长 ID
 - 模糊匹配：`use` / 显式传参支持前缀子串（如 `trade#共` → `trade/…#共享基础`），唯一即定位
 - 省略且无活动上下文时：唯一进行中的自动选中，多个则列出让你选；显式传 ID 可临时操作别的需求而不改活动指针
 
@@ -133,7 +133,7 @@ TODO
 ```bash
 # 1. 起需求，进入讨论（ /req-discuss 多轮对话厘清目标/影响）
 /php-workflow start 订单取消优化
-#   → 询问业务域=order，多轮讨论，产出 docs/.req-discuss/order/订单取消优化.md
+#   → 询问业务域=order，多轮讨论，产出 docs/discuss/order/订单取消优化.md
 
 # 2. 分析与设计（analyst 逐模块分析 + ralph 汇总出 design-consensus + dev-tasks）
 /php-workflow next
@@ -207,7 +207,7 @@ TODO
 ## 产出物目录
 
 ```
-docs/.req-discuss/
+docs/discuss/
   .workflow-active               # 活动上下文指针（单行 {需求ID}[#里程碑]，便捷用，非状态源）
   {域}/{需求名}/
   {需求名}.md                    # 阶段1 讨论文档
@@ -234,4 +234,4 @@ docs/.req-discuss/
 - **测试/校验**：验收基线 = `vendor/bin/phpunit modules/{模块}/tests` 单测绿 + 改动文件 `php -l` 语法校验。phpstan 默认不纳入验收（存量项目历史告警多、收益低），项目有干净基线时再可选开启。具体命令按项目配置
 - **单仓库单分支**：所有模块共用一条 feature 分支，diff 用 `git diff <默认分支>...HEAD -- modules/{模块}` 按目录隔离；**无独立分支/PR**
 - **架构规则**：遵守项目 `CLAUDE.md` 与 `.claude/rules/` 的架构与编码规范
-- **产出物只落项目内** `docs/.req-discuss/{域}/{需求名}/.task/`，禁止写入 home 或仓库外
+- **产出物只落项目内** `docs/discuss/{域}/{需求名}/.task/`，禁止写入 home 或仓库外

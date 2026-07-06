@@ -1,4 +1,4 @@
-# docs/{module}/contracts.md 生成指南
+# docs/workflow/{module}/contracts.md 生成指南
 
 contracts.md 记录模块所有对内对外的交互契约。这是其他模块负责人和前端开发最需要查阅的文档。
 

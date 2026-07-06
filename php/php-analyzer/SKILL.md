@@ -9,16 +9,16 @@ description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说
 
 | 文件 | 作用 | 参考指南 |
 |------|------|---------|
-| `docs/{service-name}/overview.md` | 模块名片：职责、目录结构、技术栈、依赖 | `references/overview-md.md` |
-| `docs/{service-name}/business.md` | 业务规则：为什么这么处理 | `references/business-md.md` |
-| `docs/{service-name}/contracts.md` | 对外契约：承诺了什么 | `references/contracts-md.md` |
-| `docs/{service-name}/flows.md` | 执行链路：怎么流转 | `references/flows-md.md` |
+| `docs/workflow/{service-name}/overview.md` | 模块名片：职责、目录结构、技术栈、依赖 | `references/overview-md.md` |
+| `docs/workflow/{service-name}/business.md` | 业务规则：为什么这么处理 | `references/business-md.md` |
+| `docs/workflow/{service-name}/contracts.md` | 对外契约：承诺了什么 | `references/contracts-md.md` |
+| `docs/workflow/{service-name}/flows.md` | 执行链路：怎么流转 | `references/flows-md.md` |
 
 另外生成一份跨模块关联文档：
 
 | 文件 | 作用 |
 |------|------|
-| `docs/cross-module.md` | 模块间依赖关系、事件级联、共享模型引用 |
+| `docs/workflow/cross-module.md` | 模块间依赖关系、事件级联、共享模型引用 |
 
 ### 文档间职责边界（必须遵守）
 
@@ -38,15 +38,15 @@ description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说
 
 ### 模式一：单模块分析（默认 / 节约成本）
 
-用户指定某个模块名（如 `account`、`user`），只分析该模块，生成 `docs/{service-name}/` 下四份文档。
+用户指定某个模块名（如 `account`、`user`），只分析该模块，生成 `docs/workflow/{service-name}/` 下四份文档。
 
 ### 模式二：全量分析
 
-用户明确要求"全量分析"或"分析所有模块"时，按模块逐个执行，每完成一个模块输出进度，最后生成 `docs/cross-module.md`。
+用户明确要求"全量分析"或"分析所有模块"时，按模块逐个执行，每完成一个模块输出进度，最后生成 `docs/workflow/cross-module.md`。
 
 ### 模式三：跨模块关联分析
 
-用户要求"跨模块分析"或"模块关联"时，基于已有的各模块文档，生成或更新 `docs/cross-module.md`。
+用户要求"跨模块分析"或"模块关联"时，基于已有的各模块文档，生成或更新 `docs/workflow/cross-module.md`。
 
 ## 第一步：识别模块清单
 
@@ -121,10 +121,10 @@ description: 分析 PHP/Laravel 伪多模块项目的服务架构。当用户说
 
 按以下顺序生成，每份文档读取对应的 reference 文件获取详细规则和模板：
 
-1. **docs/{service-name}/overview.md** → 读取 `references/overview-md.md`
-2. **docs/{service-name}/business.md** → 读取 `references/business-md.md`
-3. **docs/{service-name}/contracts.md** → 读取 `references/contracts-md.md`
-4. **docs/{service-name}/flows.md** → 读取 `references/flows-md.md`
+1. **docs/workflow/{service-name}/overview.md** → 读取 `references/overview-md.md`
+2. **docs/workflow/{service-name}/business.md** → 读取 `references/business-md.md`
+3. **docs/workflow/{service-name}/contracts.md** → 读取 `references/contracts-md.md`
+4. **docs/workflow/{service-name}/flows.md** → 读取 `references/flows-md.md`
 
 如果用户只要求生成某一份文档，只读取对应的 reference 文件即可。
 

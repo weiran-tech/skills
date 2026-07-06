@@ -17,8 +17,8 @@ description: 为 Java 独立服务项目生成标准化的 Claude Code 规则文
 | `.claude/rules/architecture.md` | 通用规则 | 模板直出 | DDD 分层约束 + 设计原则 + 编码标准 + Mapper XML 安全规范 + 完成检查清单 |
 | `.claude/rules/unit-test-conventions.md` | 通用规则 | 模板直出 | 单元测试规范 + Maven 构建编译测试命令 |
 | `.claude/rules/package-map.md` | 项目特有 | docs 或扫描 | 包路径速查表（无 globs，无条件加载） |
-| `.claude/rules/mq-conventions.md` | 混合 | 模板 + docs/扫描 | MQ 开发模板 + 幂等约定 + 项目特有 tag/常量（globs 动态生成） |
-| `.claude/rules/rpc-conventions.md` | 混合 | 模板 + docs/扫描 | 本项目 RPC 框架约定 + RPC 开发模板（globs 固定：api/rpc/acl） |
+| `.claude/rules/mq-conventions.md` | 混合 | 模板 + docs/workflow/扫描 | MQ 开发模板 + 幂等约定 + 项目特有 tag/常量（globs 动态生成） |
+| `.claude/rules/rpc-conventions.md` | 混合 | 模板 + docs/workflow/扫描 | 本项目 RPC 框架约定 + RPC 开发模板（globs 固定：api/rpc/acl） |
 
 ### 信息归属原则
 
@@ -41,15 +41,15 @@ rpc-conventions        → RPC 开发模板 + 本项目 RPC 框架约定
 
 ### 第一步：获取项目信息
 
-优先从 `docs/` 目录获取，回退到代码扫描。
+优先从 `docs/workflow/` 目录获取，回退到代码扫描。
 
 **模式 A：docs 存在（推荐）**
 
-检查 `docs/` 目录是否包含 `overview.md`、`contracts.md`、`flows.md`。如果存在，直接读取：
+检查 `docs/workflow/` 目录是否包含 `overview.md`、`contracts.md`、`flows.md`。如果存在，直接读取：
 
-- `docs/{service-name}/overview.md` → 项目名称、基础包名、模块列表、技术栈、上下游依赖
-- `docs/{service-name}/contracts.md` → MQ 事件契约（topic/tag/consumerGroup）、RPC 接口列表、高扇出 tag
-- `docs/{service-name}/flows.md` → 消费者包路径、事件发布入口类
+- `docs/workflow/{service-name}/overview.md` → 项目名称、基础包名、模块列表、技术栈、上下游依赖
+- `docs/workflow/{service-name}/contracts.md` → MQ 事件契约（topic/tag/consumerGroup）、RPC 接口列表、高扇出 tag
+- `docs/workflow/{service-name}/flows.md` → 消费者包路径、事件发布入口类
 
 仅补充读取 `pom.xml` 获取 `<modules>` 列表（用于 package-map 生成）。
 

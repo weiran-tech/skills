@@ -26,9 +26,9 @@
     {里程碑A}/  analysis/ design-consensus.md dev-tasks.md plans/ done/ review/ rework/
     {里程碑B}/  analysis/ design-consensus.md dev-tasks.md plans/ done/ review/ rework/
 ```
-另：`docs/.req-discuss/.workflow-active` 是活动上下文指针（单行 `{需求ID}[#里程碑]`，便捷用，非状态源）。
+另：`docs/discuss/.workflow-active` 是活动上下文指针（单行 `{需求ID}[#里程碑]`，便捷用，非状态源）。
 
-**产出物根路径约定**：阶段 2~5 产出物路径写作 `.task/{...}` 时，单里程碑指 `docs/.req-discuss/{域}/{需求名}/.task/{...}`；多里程碑下除讨论文档、架构时序图、`design-foundation.md` 等需求级共享物外，分析/设计/任务/审查一律落到 `.task/milestones/{里程碑}/{...}`，各 agent 工作范围限定在该里程碑覆盖的模块。两种模式执行逻辑一致，仅根路径不同。
+**产出物根路径约定**：阶段 2~5 产出物路径写作 `.task/{...}` 时，单里程碑指 `docs/discuss/{域}/{需求名}/.task/{...}`；多里程碑下除讨论文档、架构时序图、`design-foundation.md` 等需求级共享物外，分析/设计/任务/审查一律落到 `.task/milestones/{里程碑}/{...}`，各 agent 工作范围限定在该里程碑覆盖的模块。两种模式执行逻辑一致，仅根路径不同。
 
 ---
 

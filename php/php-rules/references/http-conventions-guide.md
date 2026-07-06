@@ -405,7 +405,7 @@ Action 必须返回 `LengthAwarePaginator`，`$perPage` 作为参数传入，不
 - [ ] 列表页使用 `paginate(...)` + `appends(...)`
 - [ ] 模板用 `route_url(...)`
 - [ ] 模板继承正确的父模板
-- [ ] `docs/{module}/contracts.md` 同步更新
+- [ ] `docs/workflow/{module}/contracts.md` 同步更新
 
 验证命令：
 
