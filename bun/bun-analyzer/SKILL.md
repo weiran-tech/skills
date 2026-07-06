@@ -9,17 +9,17 @@ description : 分析 Bun 项目的架构
 
 | 文件                                    | 作用                | 参考指南                        |
 |---------------------------------------|-------------------|-----------------------------|
-| `docs/workflow/{service}/overview.md` | 服务名片：职责、模块、技术栈、依赖 | `references/overview-md.md` |
-| `docs/workflow/{service}/business.md` | 业务规则：为什么这么处理      | `references/business-md.md` |
-| `docs/workflow/{service}/flows.md`    | 执行链路：怎么流转         | `references/flows-md.md`    |
+| `docs/workflow/{service-name}/overview.md` | 服务名片：职责、模块、技术栈、依赖 | `references/overview-md.md` |
+| `docs/workflow/{service-name}/business.md` | 业务规则：为什么这么处理      | `references/business-md.md` |
+| `docs/workflow/{service-name}/flows.md`    | 执行链路：怎么流转         | `references/flows-md.md`    |
 
 ### 文档间职责边界（必须遵守）
 
 每份文档只回答一个问题，禁止交叉：
 
-- **docs/workflow/{service}/overview.md** → 事实（是什么、有什么、依赖谁）
-- **docs/workflow/{service}/business.md** → 规则（为什么这么处理），禁止出现具体名称和执行流程步骤
-- **docs/workflow/{service}/flows.md** → 链路（怎么流转），禁止展开业务规则细节
+- **docs/workflow/{service-name}/overview.md** → 事实（是什么、有什么、依赖谁）
+- **docs/workflow/{service-name}/business.md** → 规则（为什么这么处理），禁止出现具体名称和执行流程步骤
+- **docs/workflow/{service-name}/flows.md** → 链路（怎么流转），禁止展开业务规则细节
 
 文档间只做单向引用，不复制内容：
 

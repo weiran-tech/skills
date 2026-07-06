@@ -43,15 +43,15 @@ cross-service          → 跨服务清单（做什么 → 引用去哪看）
 
 ### 第一步：获取项目信息
 
-优先从 `docs/` 目录获取，回退到代码扫描。
+优先从 `docs/workflow/` 目录获取，回退到代码扫描。
 
 **模式 A：docs 存在（推荐）**
 
-检查 `docs/` 目录是否包含 `overview.md`、`contracts.md`、`flows.md`。如果存在，直接读取：
+检查 `docs/workflow/` 目录是否包含 `overview.md`、`contracts.md`、`flows.md`。如果存在，直接读取：
 
-- `docs/overview.md` → 项目名称、基础包名、模块列表、技术栈、上下游依赖
-- `docs/contracts.md` → MQ 事件契约（topic/tag/consumerGroup）、RPC 接口列表、高扇出 tag
-- `docs/flows.md` → 消费者包路径、事件发布入口类
+- `docs/workflow/overview.md` → 项目名称、基础包名、模块列表、技术栈、上下游依赖
+- `docs/workflow/contracts.md` → MQ 事件契约（topic/tag/consumerGroup）、RPC 接口列表、高扇出 tag
+- `docs/workflow/flows.md` → 消费者包路径、事件发布入口类
 
 仅补充读取 `pom.xml` 获取 `<modules>` 列表（用于 package-map 生成）。
 

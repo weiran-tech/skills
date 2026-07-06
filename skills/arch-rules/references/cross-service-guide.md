@@ -24,12 +24,12 @@ globs 限定在跨服务交互的代码路径。只有操作 MQ 消费者、ACL 
 
 | 文档 | 什么时候看 |
 |------|-----------|
-| `docs/contracts.md` | 新增/修改 MQ 事件或 RPC 接口前（避免 tag 冲突、消息体不兼容） |
-| `docs/flows.md` | 评估改动的下游影响范围时 |
-| `docs/business.md` | 实现业务逻辑前（理解状态机和业务规则） |
-| `docs/overview.md` | 初次进入本仓库时 |
+| `docs/workflow/contracts.md` | 新增/修改 MQ 事件或 RPC 接口前（避免 tag 冲突、消息体不兼容） |
+| `docs/workflow/flows.md` | 评估改动的下游影响范围时 |
+| `docs/workflow/business.md` | 实现业务逻辑前（理解状态机和业务规则） |
+| `docs/workflow/overview.md` | 初次进入本仓库时 |
 
-如果 docs/ 目录不存在，此部分改为提醒阅读 CLAUDE.md 和 .claude/rules/ 下的规则文件。
+如果 docs/workflow/ 目录不存在，此部分改为提醒阅读 CLAUDE.md 和 .claude/rules/ 下的规则文件。
 
 ### 第二部分：改动类型清单（清单 + 引用，不重复正文）
 

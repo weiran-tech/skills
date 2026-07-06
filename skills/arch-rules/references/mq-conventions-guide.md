@@ -2,7 +2,7 @@
 
 mq-conventions.md 包含通用 MQ 规范和项目特有 MQ 信息。通用部分固定输出，项目特有部分优先从 docs 提取。
 
-**数据来源优先级**：`docs/contracts.md` > 代码扫描。docs 存在时不做代码扫描。
+**数据来源优先级**：`docs/workflow/contracts.md` > 代码扫描。docs 存在时不做代码扫描。
 
 ## frontmatter
 
@@ -21,25 +21,25 @@ globs:
 - 消费者在 `adapter/consumer/` → globs 写 `**/adapter/consumer/**`
 
 globs 路径来源：
-- **docs 存在时**：从 `docs/contracts.md` 的"消费的 MQ 事件"表格中的监听器类提取包路径
+- **docs 存在时**：从 `docs/workflow/contracts.md` 的"消费的 MQ 事件"表格中的监听器类提取包路径
 - **docs 不存在时**：grep `@RocketMQMessageListener` 提取消费者包路径
 
 ## 信息获取
 
-### 从 docs/contracts.md 提取（优先）
+### 从 contracts.md 提取（优先）
 
-如果 `docs/contracts.md` 存在，从中提取以下项目特有信息：
+如果 `docs/workflow/contracts.md` 存在，从中提取以下项目特有信息：
 
 - **消费者包路径**：从"消费的 MQ 事件"表格的"监听器类"列提取包路径模式
 - **ConsumerGroup 命名规则**：从"ConsumerGroup"列推断命名模式（如 `consumer_group_{service}_{业务标识}`）
 - **事件发布入口类**：从"发布的 MQ 事件"表格的"发布类"列提取
 - **Tag 命名约定**：从"Tag"列推断命名模式
-- **高扇出 tag**：从"消费的 MQ 事件"中统计同一 tag 被多个监听器消费的情况；或从 `docs/flows.md` 的事件级联链路识别
-- **常量类位置**：从 `docs/overview.md` 的模块结构中推断 domain 模块的 constants 包路径
+- **高扇出 tag**：从"消费的 MQ 事件"中统计同一 tag 被多个监听器消费的情况；或从 `docs/workflow/flows.md` 的事件级联链路识别
+- **常量类位置**：从 `docs/workflow/overview.md` 的模块结构中推断 domain 模块的 constants 包路径
 
 ### 从代码扫描提取（回退）
 
-仅当 `docs/contracts.md` 不存在时执行：
+仅当 `docs/workflow/contracts.md` 不存在时执行：
 
 - grep `@RocketMQMessageListener` 提取消费者包路径和 consumerGroup
 - grep MQ 常量类（TOPIC_/TAG_）
@@ -91,4 +91,4 @@ globs 路径来源：
 
 列出高扇出 tag（从 docs 或扫描结果获取），提醒修改这些 tag 的消息体属于破坏性变更。
 
-引导先查看 `docs/contracts.md` 确认所有消费方。
+引导先查看 `docs/workflow/contracts.md` 确认所有消费方。
