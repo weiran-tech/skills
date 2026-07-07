@@ -485,9 +485,11 @@
 
 ---
 
-## §C. 保留命令（5 个）
+## §C. 保留命令（7 个）
 
 > 所有保留命令缺参时统一行为：报错 + 扫描 `docs/discuss/` 与 `docs/version/` 列出可选项（AC16/D19）。
+>
+> **第 6、7 条说明**：`summary --merge` 是 `summary` 的 `--merge` 选项触发形式（同一条命令的两种调用形态），并非独立命令族；`discovery refresh` 是独立命令，但作用域为会话内存缓存，无产物文件。
 
 ### `/dev-workflow next {子需求ID}`
 
@@ -721,6 +723,98 @@
 
 ---
 
+### `/dev-workflow summary --merge {版本号A} {版本号B} ...`
+
+**用途**：多版本合并清单（AC9 补充）。把多个已生成的 change-manifest.md 拼成一份合并视图，写入 `docs/version/.merged/`，避免重复扫描 dev-tasks.md。仅在用户显式传 `--merge` 时启用。
+
+**处理步骤**：
+1. **解析参数**：
+   - 必须同时检测到 `--merge` 选项 + 至少 1 个版本号
+   - 缺 `--merge` 标志 → 走 §C summary 子节（无 flag）
+   - 缺版本号 → 报错：
+     ```
+     [字段 commandArgs 缺失] --merge 后必须传至少 1 个版本号。建议: 用 /dev-workflow version list 查可用版本
+     ```
+2. **校验所有版本 change-manifest.md 存在**：
+   - 读 `docs/version/{V1}.change-manifest.md`、`docs/version/{V2}.change-manifest.md`...
+   - 任一不存在 → 报错：`[字段 mergeInput {V}] change-manifest.md 不存在。建议: 先对该版本执行 /dev-workflow summary {V} 生成清单`
+3. **校验所有版本 status == RELEASED**：
+   - 任一不是 RELEASED → 报错：`[字段 versionStatus {V} 当前状态不符} --merge 要求全部 RELEASED。建议: 先用 /dev-workflow version close {V} 完成发布`
+4. **拼接三块**：
+   - 对每个版本依次读 change-manifest.md 的 DDL / 队列 / API 三段
+   - 每行数据末尾追加 `(来源: {版本号} / {子需求ID})` 标注
+   - **不重新读** dev-tasks.md（避免重复劳动）
+5. **版本头改为多版本汇总表**：
+   ```
+   # 多版本合并清单 {日期}
+   合并范围: {V1}, {V2}, {V3}（{N} 个版本 / {M} 个子需求）
+   生成时间: {ISO 8601}
+   ```
+6. **落盘**：写 `docs/version/.merged/change-manifest-{YYYY-MM-DD}.md`（**不覆盖任何单版本清单，避免污染**）
+
+**缺参行为**：
+- `--merge` 后不传版本号 → 报错 + 扫描 `docs/version/` 下所有 `change-manifest.md` 列出已存在的版本清单
+- 同时传 `--merge` 与 `{版本号}` → 报错：`[字段 commandArgs 冲突] --merge 与单版本 summary 互斥。建议: 二选一执行`
+
+**错误信息格式**：
+- `[字段 commandArgs 缺失] --merge 后必须传至少 1 个版本号。建议: 用 /dev-workflow version list 查可用版本`
+- `[字段 mergeInput {V}] change-manifest.md 不存在。建议: 先 /dev-workflow summary {V} 生成`
+- `[字段 versionStatus {V} {currentStatus}] --merge 要求全部 RELEASED。建议: 先 /dev-workflow version close {V} 发布`
+
+**边界情况**：
+- 1 个版本 `--merge`：仍然走合并清单流程，落地 `.merged/` 而非单版本路径（行为等价于"无合并意义但用户显式要求"，提示用户"如不要合并请去掉 --merge"）
+- 版本不在跨域路径（误走单域路径生成的 `docs/discuss/{域}/{父}/.task/.versions/{V}/change-manifest.md`）：扫描两个位置都查，照常合并
+- README.md 13 节参考索引同步指向本节
+
+---
+
+### `/dev-workflow discovery refresh`
+
+**用途**：强制重新执行发现流程（AC9 补充 / discovery.md §1-§7）。清空主 Agent 会话内的 DiscoveryContext 缓存，从头解析 `language / test_cmd / lint_cmd / static_analysis_cmd / module_root_glob / contract_type / discovery_cmd` 7 字段。
+
+**处理步骤**：
+1. **无参数**：
+   - 不接受任何位置参数（不接 `{ID}` / `{版本号}`）
+   - 接收到参数 → 报错：`[字段 commandArgs 非法] discovery refresh 不接受参数。建议: 单独执行 /dev-workflow discovery refresh`
+2. **清空 §7 缓存**：主 Agent 会话内的 `DiscoveryContext`（不落盘，仅内存对象）
+3. **重新执行 §1 全部发现**：按优先级依次读
+   - 项目根 manifest 文件（package.json / go.mod / pom.xml / Cargo.toml / pyproject.toml 等）
+   - 项目根 `CLAUDE.md` 的 `## {字段}` 段
+   - `docs/architecture/{模块}/` 下的模块契约文件（仅 `contract_type` 适用）
+4. **冲突硬阻断**：若两份来源对同一字段给出不同值，按 `discovery.md` §5 三段式报错并停下，**不缓存**
+5. **缺失硬阻断**：任意必需字段在所有来源都找不到，按 `discovery.md` §4 三段式报错并停下，**不缓存**
+6. **成功路径**：写入会话内存 `DiscoveryContext`，输出新字段值给用户
+   ```
+   发现已刷新（{当前时间 ISO 8601}）：
+     language: {L}
+     test_cmd: {TC}
+     lint_cmd: {LC}
+     static_analysis_cmd: {SAC 或 "(空，未纳入 DoD)"}
+     module_root_glob: {MRG}
+     contract_type: {CT}
+     discovery_cmd: {DC 或 "(未声明)"}
+   ```
+
+**缺参行为**：本身就是无参命令，不存在缺参。
+
+**错误信息格式**：
+- `[字段 commandArgs 非法] discovery refresh 不接受参数 {X}。建议: 单独执行 /dev-workflow discovery refresh`
+- `[字段 {X} {当前值}] 冲突: {source1}={value1}, {source2}={value2}。建议: 在 CLAUDE.md 中显式声明 {X}={winning_value}`
+- `[字段 {X} 缺失] 未从 manifest / CLAUDE.md / docs/architecture 找到。建议: 在 CLAUDE.md 中声明 ## {X} 段`
+
+**边界情况**：
+- 主 Agent 启动未读过任何 manifest：仍按 §1 顺序解析；若 manifest 也不存在则 §4 全部 7 字段缺失硬阻断
+- 用户在 `discovery refresh` 中途改动 CLAUDE.md：以上次 mtime 为快照，差异字段重新解析；其他字段沿用缓存
+- 自动失效已触发（manifest mtime 变更）：本命令为强制刷新入口，与自动失效触发机制并存
+
+**何时触发**（用户主动）：
+- 用户新增模块后需要刷新 `module_root_glob` 匹配
+- 用户修改 `CLAUDE.md` 后希望立即生效
+- `docs/architecture/` 重新生成后需要重新发现契约
+- 缓存出现字段冲突 / missing 错误后人工排查
+
+---
+
 ## §D. 已删除命令（3 个，硬切换，无兼容）
 
 > 以下命令在 v2 中**已被完全删除**，执行时直接报错并提示使用替代命令。
@@ -786,7 +880,7 @@
 
 ---
 
-## §F. 命令速查表（17 启用 + 3 删除）
+## §F. 命令速查表（19 启用 + 3 删除）
 
 | 命令族 | 命令 | 必传参数 | 主要校验 |
 |--------|------|----------|----------|
@@ -806,7 +900,9 @@
 | 保留 | `approve` | `{子需求ID}` | 子需求在审核门状态 |
 | 保留 | `status` | `[子需求ID|版本号]` | 目标存在 |
 | 保留 | `rework` | `{子需求ID}` | 子需求 COMPLETED + 版本非 RELEASED/ARCHIVED |
-| 保留 | `summary` | `{版本号}` | 版本存在 |
+| 保留 | `summary` | `{版本号}` | 版本存在 + ∈ {IN_PROGRESS/READY/RELEASED} |
+| 保留 | `summary --merge` | `{版本号A} {版本号B} ...` | 全部版本 change-manifest.md 存在 + 全部 RELEASED |
+| 保留 | `discovery refresh` | （无） | 清空 §7 缓存，重跑 §1 发现 |
 | ❌ 删除 | `use` | — | 报错"已废弃" |
 | ❌ 删除 | `split` | — | 报错"已废弃" |
 | ❌ 删除 | `start` | — | 报错"已废弃" |
@@ -814,6 +910,8 @@
 **计数修正**：
 - req：create / show / list / split = **4 个**
 - version：create / show / list / add-sub / start / ready / close / archive = **8 个**
-- 保留：next / approve / status / rework / summary = **5 个**
-- **合计启用：4 + 8 + 5 = 17 个**（AC3）
+- 保留：next / approve / status / rework / summary / `summary --merge` / `discovery refresh` = **7 个**
+- **合计启用：4 + 8 + 7 = 19 个**（AC3 修订）
 - **删除：use / split / start = 3 个**
+
+> 注：`summary --merge` 计入"保留"族但本质是 `summary` 的 `--merge` 选项触发形态，调用方走同一条 `/dev-workflow summary` 入口，主 Agent 按是否带 `--merge` 分发到 §C summary 或 summary --merge 子节。
