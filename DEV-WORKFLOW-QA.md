@@ -1,5 +1,48 @@
 # dev-workflow QA — 交互流程 / 文件追踪 / 节点清单
 
+```
+.claude/rules/architecture.md     设计原则, 编码规则
+.claude/rules/coding.md           编码原则
+.claude/rules/testing.md          测试原则
+.claude/rules/release.md          项目发布 / 构建
+.claude/rules/coding-spec.md      代码编写约定
+.claude/skills/*-analyzer         项目分析, 用来生成 docs/workflow/{模块}/{overview,flows,business,contracts}.md, docs/workflow/cross-module.md 文件
+.claude/skills/*-rules            语言的规则生成工具, 用来生成 .claude/rules/{architecture,coding,build-and-test,coding-spec,...}.md 文件, 项目规则
+.claude/skills/dev-workflows      全流程需求 / 版本 / 执行流程
+.claude/skills/dev-discuss        需求讨论, 用来生成 docs/discuss/ 下的讨论文件
+.claude/skills/dev-task           生成任务执行计划
+.claude/skills/dev-userstory      [WIP] 生成用户故事, 用来生成测试用例
+
+docs                              
+├── discuss/                      需求树（按模块/需求）
+│   └── {模块}/{需求名}/
+│       ├── metadata.md           # 需求状态元数据, 记录记录汇总数据 [标题 / 状态 / 版本 / 文件索引 / 审核记录 / 执行步骤 / 代码评审记录]
+│       └── discussion.md         # Stage 1 : 讨论结果
+│       └── .detail                # 需求任务执行计划
+│          └── analysis/          # Stage 2 : 逐个模块分析的产物
+│              └── {模块}.md       # Stage 2 : 逐个模块分析的产物
+│          └── design.md          # Stage 2 : 设计文档
+│          └── task.md            # Stage 3 : 任务清单
+│          └── task/              # Stage 3 : 任务清单「复杂拆解」
+│              └── {N.n}.md       # Stage 3 : 复杂任务执行步骤
+│          └── code-review/       # Stage 3 : 代码评审记录
+│              └── CR-1.md        # Stage 3 : 代码评审记录[步骤]
+│          ├── acceptance.md      # Stage 4 : 验收报告
+│          ├── manifest.md        # Stage 4 : 交付清单
+│          ├── rework.md          # Stage 5 : 返工
+│              ├── RE-1.md        # Stage 5 : 返工单
+└── version/                      # 版本聚合（全局，跨需求/跨模块）
+    ├── v1.0                      # 无扩展名；
+    ├── v1.1
+    └── v2.0
+
+
+  - 哪些文件的作用存在冲突, 
+  - 哪些命令应当移除, 
+  - 命令的边界是什么, 
+  - 不同文件应当承担什么样的作用
+```
+
 > 目的：把 `development/dev-workflow/` 下的全部内容做一份"测试与排查手册"——读完它就能照着走完一遍流程、知道每个文件管什么、知道每个节点该读谁/写谁/校验谁。
 >
 > 本 QA 文档基于以下文件（2026-07-07 读取快照）：

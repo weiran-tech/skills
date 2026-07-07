@@ -21,7 +21,7 @@
 
 状态机驱动的开发流程 skill。把「**父需求 → 子需求（5 阶段）→ 版本聚合**」串成一个统一入口，每个子需求由 `metadata.md` 记录状态，版本通过 `docs/version/{版本号}` 聚合跨域子需求；每次 `/dev-workflow next {子需求ID}` 显式指定推进对象，自动决定下一步调度哪个 agent、传什么参数。
 
-面向伪多模块单体项目：代码都在同一仓库 `{module_root_glob}` 下，跨模块走 `{contract_type}` 通道（具体类型在项目 `CLAUDE.md` 的 `## 跨模块调用` 段声明），审查按模块路径过滤 diff，架构上下文取自 `docs/architecture/{module}/`（项目配置的自定义发现命令产出）。测试/语法校验等具体命令默认按项目 manifest 文件中声明的 `{test_cmd}` / `{lint_cmd}`，无项目级硬编码默认值。
+面向伪多模块单体项目：代码都在同一仓库 `{module_root_glob}` 下，跨模块走 `{contract_type}` 通道（具体类型在项目 `CLAUDE.md` 的 `## 跨模块调用` 段声明），审查按模块路径过滤 diff，架构上下文取自 `docs/workflow/{module}/`（项目配置的自定义发现命令产出）。测试/语法校验等具体命令默认按项目 manifest 文件中声明的 `{test_cmd}` / `{lint_cmd}`，无项目级硬编码默认值。
 
 ---
 

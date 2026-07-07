@@ -15,7 +15,7 @@ verifier "
 1. 确认 metadata.md 任务清单全部已勾选、各任务审查结论均为 PASSED
 2. 全量回归：{test_cmd} 全绿
 3. 对本次变更涉及的文件执行 {lint_cmd} 语法校验全部通过（{static_analysis_cmd} 默认不纳入验收）
-4. 跨模块一致性：对照 docs/discuss/{域}/{父需求名}/.task/{子需求名}/design-consensus.md 与 docs/architecture/cross-module.md，校验 {contract_type} 契约闭合
+4. 跨模块一致性：对照 docs/discuss/{域}/{父需求名}/.task/{子需求名}/design-consensus.md 与 docs/workflow/cross-module.md，校验 {contract_type} 契约闭合
 5. 迁移检查：如涉及 {module_root_glob}/*/resources/migrations，确认迁移与回滚可用
 6. 结果写入 docs/discuss/{域}/{父需求名}/.task/{子需求名}/acceptance.md
 

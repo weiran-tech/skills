@@ -29,7 +29,7 @@
 | `composer.json`（作为模块清单来源）                  | `manifest file`（通用概念）   | 模块路径约定           |
 | `composer.json` 的 `autoload.psr-4`                  | 删除                         | 模块清单发现路径       |
 | `Service/Events/Listeners` 跨模块机制                 | `{contract_type}` 通道       | 跨模块交互             |
-| `docs/workflow/{模块}/` 架构文档目录                  | `docs/architecture/{模块}/` | 架构上下文来源         |
+| `docs/workflow/{模块}/` 架构文档目录                  | `docs/workflow/{模块}/` | 架构上下文来源         |
 | `phpstan` 默认 DoD                                   | "静态分析" 通用占位          | 验收基线               |
 | `docs/discuss/.workflow-active` 粘性指针             | 删除（未引用）                | 活动指针约定           |
 | `modules/{模块}` 模块根                              | `{module_root_glob}`          | 模块路径约定           |
@@ -42,7 +42,7 @@
 | `php-workflow`（作为 skill 名）          | `dev-workflow`（作为 skill 名）                      | 仅在 `MIGRATION.md` 与原项目历史语境保留                            |
 | `composer.json` 模块清单发现             | `manifest file` + `CLAUDE.md` 运行时声明             | 从硬编码 PSR-4 推断改为运行时项目自声明                                |
 | `php-analyzer` 架构文档产出              | `{discovery_cmd}` 由项目 `CLAUDE.md` 指定           | 不再硬编码 PHP 分析器                                                |
-| `docs/workflow/{模块}/` 架构文档         | `docs/architecture/{模块}/`                         | 命名从"工作流产物"改为"架构产物"                                     |
+| `docs/workflow/{模块}/` 架构文档         | `docs/workflow/{模块}/`                         | 命名从"工作流产物"改为"架构产物"                                     |
 | `Service/Events/Listeners` 跨模块机制      | `{contract_type}` 通道（按语言而异）                  | 不再限定具体实现名                                                  |
 
 ## Compatibility stance（兼容性立场）

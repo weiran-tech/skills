@@ -53,7 +53,7 @@
 1. **解析参数**：
    - 必传：域 + 父需求名（如 `payment/支付渠道重构`）
    - 缺参 → 报错：`[字段 reqId 缺失] 必须传 {域}/{父需求名} 格式。建议: /dev-workflow req create payment/支付渠道重构`
-2. **校验域合法性**：域必须与项目 `manifest file` 中声明的 `{module_root_glob}` 匹配，或在 `docs/architecture/` 已声明的模块清单中存在，否则报错。详见 `discovery.md`
+2. **校验域合法性**：域必须与项目 `manifest file` 中声明的 `{module_root_glob}` 匹配，或在 `docs/workflow/` 已声明的模块清单中存在，否则报错。详见 `discovery.md`
 3. **校验父需求不存在**：
    - 检查 `docs/discuss/{域}/{父需求名}/` 是否已存在，存在则报错（AC3 + Appendix A）：
      `[字段 parentReqId {域}/{父需求名}] 父需求已存在。建议: 用 /dev-workflow req show {域}/{父需求名} 查看，或选其他名称`
@@ -780,7 +780,7 @@
 3. **重新执行 §1 全部发现**：按优先级依次读
    - 项目根 manifest 文件（package.json / go.mod / pom.xml / Cargo.toml / pyproject.toml 等）
    - 项目根 `CLAUDE.md` 的 `## {字段}` 段
-   - `docs/architecture/{模块}/` 下的模块契约文件（仅 `contract_type` 适用）
+   - `docs/workflow/{模块}/` 下的模块契约文件（仅 `contract_type` 适用）
 4. **冲突硬阻断**：若两份来源对同一字段给出不同值，按 `discovery.md` §5 三段式报错并停下，**不缓存**
 5. **缺失硬阻断**：任意必需字段在所有来源都找不到，按 `discovery.md` §4 三段式报错并停下，**不缓存**
 6. **成功路径**：写入会话内存 `DiscoveryContext`，输出新字段值给用户
@@ -800,7 +800,7 @@
 **错误信息格式**：
 - `[字段 commandArgs 非法] discovery refresh 不接受参数 {X}。建议: 单独执行 /dev-workflow discovery refresh`
 - `[字段 {X} {当前值}] 冲突: {source1}={value1}, {source2}={value2}。建议: 在 CLAUDE.md 中显式声明 {X}={winning_value}`
-- `[字段 {X} 缺失] 未从 manifest / CLAUDE.md / docs/architecture 找到。建议: 在 CLAUDE.md 中声明 ## {X} 段`
+- `[字段 {X} 缺失] 未从 manifest / CLAUDE.md / docs/workflow 找到。建议: 在 CLAUDE.md 中声明 ## {X} 段`
 
 **边界情况**：
 - 主 Agent 启动未读过任何 manifest：仍按 §1 顺序解析；若 manifest 也不存在则 §4 全部 7 字段缺失硬阻断
@@ -810,7 +810,7 @@
 **何时触发**（用户主动）：
 - 用户新增模块后需要刷新 `module_root_glob` 匹配
 - 用户修改 `CLAUDE.md` 后希望立即生效
-- `docs/architecture/` 重新生成后需要重新发现契约
+- `docs/workflow/` 重新生成后需要重新发现契约
 - 缓存出现字段冲突 / missing 错误后人工排查
 
 ---

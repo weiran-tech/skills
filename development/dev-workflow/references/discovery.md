@@ -10,7 +10,7 @@
 
 1. **项目 manifest 文件**（根目录）：读取 `engines` / `scripts` / `workspaces` 等字段，识别语言和测试/校验命令
 2. **`CLAUDE.md`**（项目根）：项目级指令文件，可显式覆盖 manifest 默认推断
-3. **`docs/architecture/{module}/`** 目录：模块契约层声明，发现跨模块 `{contract_type}` 类型
+3. **`docs/workflow/{module}/`** 目录：模块契约层声明，发现跨模块 `{contract_type}` 类型
 
 后置来源可覆盖前置来源；冲突按 §5 conflict 规则处理。
 
@@ -63,7 +63,7 @@
 任何必需字段在所有发现源中都找不到对应值时，硬阻塞并报错：
 
 ```
-[字段 {X} 缺失] 未从 manifest / CLAUDE.md / docs/architecture 找到 {X} 的值。建议: 在 CLAUDE.md 中声明 ## {X} 段，或在 manifest 文件中添加 {X} 字段。
+[字段 {X} 缺失] 未从 manifest / CLAUDE.md / docs/workflow 找到 {X} 的值。建议: 在 CLAUDE.md 中声明 ## {X} 段，或在 manifest 文件中添加 {X} 字段。
 ```
 
 **示例**：
@@ -73,7 +73,7 @@
 **回退机制**：
 1. 优先尝试 manifest 文件推断（按 §3 表）
 2. 缺则读 `CLAUDE.md` 中 `## {X}` 段
-3. 仍缺则读 `docs/architecture/` 下任一模块的 `contracts.md`（仅对 `contract_type` 字段适用）
+3. 仍缺则读 `docs/workflow/` 下任一模块的 `contracts.md`（仅对 `contract_type` 字段适用）
 4. 最终缺 → 硬阻塞，不自动 fallback 占位值
 
 ---
@@ -92,7 +92,7 @@
 
 **优先级（当 CLAUDE.md 未显式覆盖时）**：
 1. `CLAUDE.md` `## {X}` 段（最高）
-2. `docs/architecture/{module}/` 中模块级声明
+2. `docs/workflow/{module}/` 中模块级声明
 3. manifest 文件（按 §3 表推断）
 4. 隐式默认（最少；如 `test_cmd` 缺省尝试 `npm test`，仍失败走 §4 missing）
 
@@ -145,10 +145,10 @@ Node 项目中 `pnpm-workspace.yaml` 的 `packages` 字段与 `package.json#work
 - 缓存失效触发：
   - `manifest` 文件 mtime 变更
   - `CLAUDE.md` 文件 mtime 变更
-  - `docs/architecture/` 下任何模块契约文件 mtime 变更
+  - `docs/workflow/` 下任何模块契约文件 mtime 变更
   - 用户显式调用 `/dev-workflow discovery refresh`（保留命令，见 §9）
 
-> **`{discovery_cmd}` 触发**：当发现结果失效或初次安装本 skill 时，应提示用户跑 `{discovery_cmd}` 重新生成 `docs/architecture/` 全部产物。
+> **`{discovery_cmd}` 触发**：当发现结果失效或初次安装本 skill 时，应提示用户跑 `{discovery_cmd}` 重新生成 `docs/workflow/` 全部产物。
 
 ---
 
@@ -182,7 +182,7 @@ Node 项目中 `pnpm-workspace.yaml` 的 `packages` 字段与 `package.json#work
 **用途**：
 - 用户新增模块后需要刷新 `module_root_glob` 匹配
 - 用户修改 `CLAUDE.md` 后希望立即生效
-- `docs/architecture/` 重新生成后需要重新发现契约
+- `docs/workflow/` 重新生成后需要重新发现契约
 
 ---
 
@@ -190,12 +190,12 @@ Node 项目中 `pnpm-workspace.yaml` 的 `packages` 字段与 `package.json#work
 
 | 字段 | 来源（优先级 1 → 3） | 缺省行为 |
 |------|---------------------|----------|
-| `language` | CLAUDE.md → manifest#engines → docs/architecture 命名 | 缺则 §4 hard-block |
+| `language` | CLAUDE.md → manifest#engines → docs/workflow 命名 | 缺则 §4 hard-block |
 | `test_cmd` | CLAUDE.md → manifest#scripts.test | 缺则 §4 hard-block |
 | `lint_cmd` | CLAUDE.md → manifest#scripts.lint | 缺则 §4 hard-block |
 | `static_analysis_cmd` | CLAUDE.md → manifest#scripts.analyze | 缺则空字符串，不 DoD 校验 |
-| `module_root_glob` | CLAUDE.md → manifest#workspaces → docs/architecture 命名 | 缺则 §4 hard-block |
-| `contract_type` | docs/architecture/{module}/contracts.md → CLAUDE.md → manifest 推断 | 缺则 §4 hard-block |
+| `module_root_glob` | CLAUDE.md → manifest#workspaces → docs/workflow 命名 | 缺则 §4 hard-block |
+| `contract_type` | docs/workflow/{module}/contracts.md → CLAUDE.md → manifest 推断 | 缺则 §4 hard-block |
 | `discovery_cmd` | CLAUDE.md → manifest 推断 | 缺则空字符串 |
 
 ---
