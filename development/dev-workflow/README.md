@@ -1,5 +1,66 @@
 # Workflow — 伪多模块单体需求开发全流程编排（v2 版本制度 · 语言无关）
 
+## 目标
+
+创建通用的需求开发 / 版本管理流程, 用来完成自动化编码
+
+## 文件作用
+
+```
+.claude/rules/architecture.md     设计原则, 编码规则
+.claude/rules/coding.md           编码原则
+.claude/rules/testing.md          测试原则
+.claude/rules/release.md          项目发布 / 构建
+.claude/rules/coding-spec.md      代码编写约定
+.claude/skills/*-analyzer         项目分析, 用来生成 docs/workflow/{模块}/{overview,flows,business,contracts}.md, docs/workflow/cross-module.md 文件
+.claude/skills/*-rules            语言的规则生成工具, 用来生成 .claude/rules/{architecture,coding,build-and-test,coding-spec,...}.md 文件, 项目规则
+.claude/skills/dev-workflows      全流程需求 / 版本 / 执行流程
+.claude/skills/dev-discuss        需求讨论, 用来生成 docs/discuss/ 下的讨论文件
+.claude/skills/dev-task           生成任务执行计划
+.claude/skills/dev-userstory      [WIP] 生成用户故事, 用来生成测试用例
+
+docs                              
+├── discuss/                      需求树（按模块/需求）
+│   └── {模块}/{需求名}/
+│       ├── metadata.md           # 需求状态元数据, 记录记录汇总数据 [标题 / 状态 / 版本 / 文件索引 / 审核记录 / 执行步骤 / 代码评审记录]
+│       └── discussion.md         # Stage 1 : 讨论结果
+│       └── .detail                # 需求任务执行计划
+│          └── analysis/          # Stage 2 : 逐个模块分析的产物
+│              └── {模块}.md       # Stage 2 : 逐个模块分析的产物
+│          └── design.md          # Stage 2 : 设计文档
+│          └── tasks.md           # Stage 3 : 任务清单
+│          └── tasks/             # Stage 3 : 任务清单「复杂拆解」
+│              └── {N.n}.md       # Stage 3 : 复杂任务执行步骤
+│          └── code-review/       # Stage 3 : 代码评审记录
+│              └── CR-1.md        # Stage 3 : 代码评审记录[步骤]
+│          ├── acceptance.md      # Stage 4 : 验收报告
+│          ├── manifest.md        # Stage 4 : 交付清单
+│          ├── rework.md          # Stage 5 : 返工
+│              ├── RE-1.md        # Stage 5 : 返工单
+└── version/                      # 版本聚合（全局，跨需求/跨模块）
+    ├── v1.0                      # 无扩展名；
+    ├── v1.1
+    └── v2.0
+
+
+  - 哪些文件的作用存在冲突, 
+  - 哪些命令应当移除, 
+  - 命令的边界是什么, 
+  - 不同文件应当承担什么样的作用
+```
+
+## 待处理内容
+
+- 将已经标识为已删除的命令移除
+- .task/ 内的文件不明确作用, 因为整体是通过 php-workflow 迁移, 存在需求遗留
+- .workflow-active 的作用不明确, 需要考虑移除或者明确作用
+- 整理当前的文件目录的作用, 给与 AI 来去做评定, 
+  - 哪些文件的作用存在冲突, 
+  - 哪些命令应当移除, 
+  - 命令的边界是什么, 
+  - 不同文件应当承担什么样的作用
+- 怎样让当前的模块设计支持 monorepo 的项目自编码
+
 > **⚠️ v2 不兼容 v1；旧数据请自行清理**
 >
 > 本 skill 已从「里程碑（milestone）制度」重构为「版本（version）制度」。
@@ -443,7 +504,7 @@ docs/
 
 ## 依赖与约定
 
-- **依赖 skill/agent**：`req-discuss`（阶段1）、`{discovery_cmd}`（架构文档发现）、`analyst`/`architect`/`planner`/`executor`/`code-reviewer`/`verifier`（OMC agents）、`team`（并行编码）、`ralph`（汇总设计）
+- **依赖 skill/agent**：`dev-discuss`（阶段1）、`{discovery_cmd}`（架构文档发现）、`analyst`/`architect`/`planner`/`executor`/`code-reviewer`/`verifier`（OMC agents）、`team`（并行编码）、`ralph`（汇总设计）
 - **测试/校验**：验收基线 = `{test_cmd} {module_root_glob}/...` 单测绿 + 改动文件 `{lint_cmd}` 语法校验。`{static_analysis_cmd}` 默认不纳入验收（存量项目历史告警多、收益低），项目有干净基线时再可选开启。具体命令按项目 manifest 文件配置
 - **单仓库单分支**：所有模块共用一条 feature 分支，diff 用 `git diff <默认分支>...HEAD -- {module_root_glob}` 按目录隔离；**无独立分支/PR**
 - **架构规则**：遵守项目 `CLAUDE.md` 与 `.claude/rules/` 的架构与编码规范

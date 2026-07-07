@@ -345,7 +345,7 @@ docs/discuss/{域}/{需求名}/
 
 | 阶段 | agent / skill | 权限 | 职责 |
 |------|--------------|------|------|
-| 阶段 1 需求讨论 | `req-discuss` | 读写 | 多轮对话厘清目标 / 影响 |
+| 阶段 1 需求讨论 | `dev-discuss` | 读写 | 多轮对话厘清目标 / 影响 |
 | 阶段 2 模块分析 | `{discovery_cmd}` / `analyst` | 只读 | 读代码 + 读架构文档 → 产出模块分析 |
 | 阶段 2 汇总设计 | `ralph` | 读写 | 汇总 analysis → design-consensus + dev-tasks |
 | 阶段 4 任务详细设计（仅复杂任务） | `architect` / `planner` | 只读 | 出任务级 plan/LLD，不写业务代码 |

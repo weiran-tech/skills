@@ -61,7 +61,7 @@ v2 重构后，返工按**子需求**粒度执行（spec C10），不再涉及 v
 |---------|------|---------|---------------------|
 | **实现级** | 设计对、代码错 | 不动 design-consensus.md；当前子需求 `currentState: COMPLETED → ANALYZING` | 受影响任务回 TODO → 重 code → 重 CR（**仅当前子需求范围内**，不级联） |
 | **设计级** | design-consensus.md 错 | 在 `design-consensus.md` 末尾追加 `## 返工修订 R{N}：{原因}`；当前子需求 `currentState: COMPLETED → ANALYZING` + 退回至阶段 2（ANALYZING）；阶段 3 重审 | **当前子需求** + **依赖被改设计的下游子需求** 级联回 ANALYZING；受影响任务回 TODO（复杂任务重出 plan）→ 重 code → 重 CR |
-| **需求级** | 需求/理解本身错 | 回阶段 1：当前子需求 `currentState → DISCUSSING`；走 `/req-discuss`（**注意：v2 不再依赖 req-discuss skill**，改用本 skill 阶段 1 入口 + 阶段 2-5 重跑） | 视讨论结论确定；当前子需求 + 全部依赖该需求的子需求 级联回 DISCUSSING |
+| **需求级** | 需求/理解本身错 | 回阶段 1：当前子需求 `currentState → DISCUSSING`；走 `/dev-discuss`（**注意：v2 不再依赖 dev-discuss skill**，改用本 skill 阶段 1 入口 + 阶段 2-5 重跑） | 视讨论结论确定；当前子需求 + 全部依赖该需求的子需求 级联回 DISCUSSING |
 
 > 跨模块级联使用 `{contract_type}` 通道（事件/接口/契约）；通过该通道触达的下游子需求会被依赖扩散算法识别。
 
