@@ -12,12 +12,6 @@
 | **AI 主 agent（执行）** | `SKILL.md`（路由器 + 12 不变量 + 错误模板） | 按 SKILL.md 末尾索引按需读 `references/{commands,templates,stage-*}.md` |
 | **v1 → v2 迁移** | 本 README 的「设计理念：版本 vs 里程碑」+「v1 → v2 目录变更」段 | 用 `req list` / `req show` 自查存量数据，按需归档 |
 
-> **⚠️ v2 不兼容 v1；旧数据请自行清理**
->
-> 本 skill 已从「里程碑（milestone）制度」重构为「版本（version）制度」。
-> 旧 `docs/discuss/.workflow-active` 粘性指针、旧 `progress.md` 状态源、旧里程碑嵌套目录、旧 `use / split / start` 命令 —— 全部硬切换删除，无迁移脚本、无双轨共存、无适配层（spec C9/D11）。
->
-> 存量 v1 数据（`docs/discuss/{域}/{需求名}/.task/progress.md`、`docs/discuss/{域}/{需求名}/.task/milestones/`、`docs/discuss/.workflow-active`）视为遗留，请用户自行清理或保留为只读历史。
 
 状态机驱动的开发流程 skill。把「**父需求 → 子需求（5 阶段）→ 版本聚合**」串成一个统一入口，每个子需求由 `metadata.md` 记录状态，版本通过 `docs/version/{版本号}` 聚合跨域子需求；每次 `/dev-workflow next {子需求ID}` 显式指定推进对象，自动决定下一步调度哪个 agent、传什么参数。
 
@@ -448,7 +442,6 @@ docs/
 ```
 
 **v1 → v2 目录变更**：
-- ❌ 删除 `docs/discuss/.workflow-active`（活动指针）
 - ❌ 删除 `docs/discuss/{域}/{需求名}/.task/progress.md`（替换为各子需求 `metadata.md`）
 - ❌ 删除 `docs/discuss/{域}/{需求名}/.task/milestones/{M}/` 嵌套（子需求同级扁平化）
 - ✅ 新增 `docs/version/{版本号}` 全局版本文件

@@ -815,49 +815,6 @@
 
 ---
 
-## §D. 已删除命令（3 个，硬切换，无兼容）
-
-> 以下命令在 v2 中**已被完全删除**，执行时直接报错并提示使用替代命令。
-
-### ❌ `/dev-workflow use [需求ID][#里程碑]`
-
-**v2 状态**：已删除。活动指针 `docs/discuss/.workflow-active` 已废弃（AC7）。
-
-**触发行为**：
-```
-[字段 commandName use] 已废弃 (v1 → v2 迁移)。改为: 不支持活动指针，每次命令必须显式传子需求 ID 或版本号
-迁移指南:
-  - use {需求ID}            → 直接传子需求ID 给 next/approve/status
-  - use #{里程碑}           → 用 /dev-workflow req list + 选子需求
-  - 设置活动上下文          → 已废弃；每次命令必须显式传参
-```
-
-### ❌ `/dev-workflow split [需求ID] {里程碑列表}`
-
-**v2 状态**：已删除。被 `req split` 替代（C5/D9）。
-
-**触发行为**：
-```
-[字段 commandName split] 已废弃 (v1 → v2 迁移)。改为: /dev-workflow req split {父需求ID} 启动交互式向导
-迁移指南:
-  - split {需求} {里程碑1} {里程碑2} → /dev-workflow req split {域}/{父需求名}
-  - 旧版里程碑已废弃，子需求同级扁平化
-```
-
-### ❌ `/dev-workflow start {需求名}`
-
-**v2 状态**：已删除。被 `req create` 替代（C5/D9）。
-
-**触发行为**：
-```
-[字段 commandName start] 已废弃 (v1 → v2 迁移)。改为: /dev-workflow req create {域}/{父需求名} 创建父需求
-迁移指南:
-  - start {需求名}          → /dev-workflow req create {域}/{需求名}
-  - start 不再支持讨论入口；讨论入口由 req split 创建子需求后进入阶段 1
-```
-
----
-
 ## §E. 错误信息格式规范（通用）
 
 > 所有命令统一使用三段式错误信息：**`[字段 {X} {当前值}] {原因}。建议: {修复}`**（AC18/D21）

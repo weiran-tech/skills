@@ -305,7 +305,6 @@ docs/workflow/
 | 版本文件 | `docs/version/{版本号}` |
 | 模块根 | `{module_root_glob}/{模块名}/`（由 manifest + CLAUDE.md 声明） |
 | 模块架构 | `docs/workflow/{模块名}/` |
-| （已删除）活动指针 | `docs/discuss/.workflow-active` ❌ 不再存在 |
 
 ---
 
