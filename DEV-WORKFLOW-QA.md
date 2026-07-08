@@ -1,49 +1,7 @@
 # dev-workflow QA — 交互流程 / 文件追踪 / 节点清单
 
 ```
-.claude/rules/                   使用 {bun,php}-rules 生成
-│   ├── architecture.md          设计原则, 编码规则
-│   ├── coding.md                编码原则
-│   ├── testing.md               测试原则
-│   ├── release.md               项目发布 / 构建
-│   ├── coding-spec.md           代码编写约定
-.claude/skills/
-│   ├── {bun,php}-analyzer       项目分析, 用来生成 docs/workflow/{模块}/{overview,flows,business,contracts}.md, docs/workflow/cross-module.md 
-│   ├── {bun,php}-rules          生成项目规则, 用来生成 .claude/rules/{architecture,coding,build-and-test,coding-spec,...}.md 文件
-│   ├── dev-workflows            全流程需求 / 版本 / 执行流程
-│   ├── dev-discuss              需求讨论, 用来生成 docs/discuss/ 下的讨论文件
-│   ├── dev-task                 生成开发任务
-│   ├── dev-userstory            [WIP] 生成用户故事, 用来生成测试用例
 
-docs                              
-├── workflow/                     该模块下的内容使用 {bun,php}-analyzer 生成
-│   ├── {模块}/
-│   │   ├── overview.md           概览
-│   │   ├── flows.md              流程
-│   │   ├── business.md           业务说明
-│   │   └── contracts.md          契约
-│   └── cross-module.md           跨模块汇总
-├── discuss/                      需求树（按模块/需求）
-│   └── {模块}/{需求名}/
-│       ├── metadata.md           # 需求状态元数据, 记录记录汇总数据 [标题 / 状态 / 版本 / 文件索引 / 审核记录 / 执行步骤 / 代码评审记录]
-│       └── discussion.md         # Stage 1 : 讨论结果
-│       └── .detail                # 需求任务执行计划
-│          └── analysis/          # Stage 2 : 逐个模块分析的产物
-│              └── {模块}.md       # Stage 2 : 逐个模块分析的产物
-│          └── design.md          # Stage 2 : 设计文档
-│          └── task.md            # Stage 3 : 任务清单
-│          └── task/              # Stage 3 : 任务清单「复杂拆解」
-│              └── {N.n}.md       # Stage 3 : 复杂任务执行步骤
-│          └── code-review/       # Stage 3 : 代码评审记录
-│              └── CR-1.md        # Stage 3 : 代码评审记录[步骤]
-│          ├── acceptance.md      # Stage 4 : 验收报告
-│          ├── manifest.md        # Stage 4 : 交付清单
-│          ├── rework.md          # Stage 5 : 返工
-│              ├── RE-1.md        # Stage 5 : 返工单
-└── version/                      # 版本聚合（全局，跨需求/跨模块）
-    ├── v1.0                      # 无扩展名；
-    ├── v1.1
-    └── v2.0
 
 
   - 哪些文件的作用存在冲突, 
