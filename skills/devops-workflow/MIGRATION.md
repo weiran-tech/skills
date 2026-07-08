@@ -6,44 +6,44 @@
 
 下列核心机制完全保留，仅替换占位符：
 
-| 类别         | 保留内容                                                                              |
-| ------------ | ------------------------------------------------------------------------------------- |
-| 状态机       | 子需求 5 阶段流程（1 需求讨论 → 2 分析与设计 → 3 设计审核 → 4 开发与逐任务审查 → 5 收尾验收） |
-| 子需求级闭环 | 阶段4 逐任务闭环：复杂度判断 → plan 门 → 编码 → DoD → CR 扫描 → CR 人工门 → 改写 → 复验回写 |
-| 状态机 5 态  | 版本状态机 `DRAFT / IN_PROGRESS / READY / RELEASED / ARCHIVED`                         |
-| 命令集合     | 4 个 `req` 子命令 + 8 个 `version` 子命令 + 5 个保留推进命令（next/approve/status/rework/summary） |
-| Schema       | `metadata.md`、`version` 文件、目录结构 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/` |
-| 三道人工门   | 阶段3 设计审核 / 阶段4 plan 确认 / 阶段4 CR 裁决（均由 `/devops-workflow approve` 分发）     |
-| 12 不变量   | 子 agent 返回 ≠ 流程推进、CR 问题人工门、编码审查分两轮、进度即时回写、设计分两层、未决项不许悬空、设计/需求层缺陷走 rework、子需求默认单个、无活动指针、版本状态机 5 态、metadata.md 单源、agent prompt 静态分析约束 |
+| 类别         | 保留内容                                                                                                                                                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 状态机       | 子需求 5 阶段流程（1 需求讨论 → 2 分析与设计 → 3 设计审核 → 4 开发与逐任务审查 → 5 收尾验收）                                                                                                                         |
+| 子需求级闭环 | 阶段4 逐任务闭环：复杂度判断 → plan 门 → 编码 → DoD → CR 扫描 → CR 人工门 → 改写 → 复验回写                                                                                                                           |
+| 状态机 5 态  | 版本状态机 `DRAFT / IN_PROGRESS / READY / RELEASED / ARCHIVED`                                                                                                                                                        |
+| 命令集合     | 4 个 `req` 子命令 + 8 个 `version` 子命令 + 5 个保留推进命令（next/approve/status/rework/summary）                                                                                                                    |
+| Schema       | `metadata.md`、`version` 文件、目录结构 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/`                                                                                                                              |
+| 三道人工门   | 阶段3 设计审核 / 阶段4 plan 确认 / 阶段4 CR 裁决（均由 `/devops-workflow approve` 分发）                                                                                                                              |
+| 12 不变量    | 子 agent 返回 ≠ 流程推进、CR 问题人工门、编码审查分两轮、进度即时回写、设计分两层、未决项不许悬空、设计/需求层缺陷走 rework、子需求默认单个、无活动指针、版本状态机 5 态、metadata.md 单源、agent prompt 静态分析约束 |
 
 ## What was removed（移除项）
 
 下列 PHP/Composer 绑定项已全部移除，由占位符替代：
 
-| 移除的原文                                          | 通用化替换                  | 出现位置               |
-| --------------------------------------------------- | --------------------------- | ---------------------- |
-| `phpunit`                                            | `{test_cmd}`                 | 验收基线               |
-| `php -l`                                             | `{lint_cmd}`                 | 验收基线               |
-| `vendor/bin/phpunit modules/{模块}/tests`            | `{test_cmd} {module_root_glob}/{模块}/tests` | 验收基线 |
-| `php-analyzer`                                       | `{discovery_cmd}`            | 模块分析、架构文档产出 |
-| `composer.json`（作为模块清单来源）                  | `manifest file`（通用概念）   | 模块路径约定           |
-| `composer.json` 的 `autoload.psr-4`                  | 删除                         | 模块清单发现路径       |
-| `Service/Events/Listeners` 跨模块机制                 | `{contract_type}` 通道       | 跨模块交互             |
-| `docs/workflow/{模块}/` 架构文档目录                  | `docs/workflow/{模块}/` | 架构上下文来源         |
-| `phpstan` 默认 DoD                                   | "静态分析" 通用占位          | 验收基线               |
-| `docs/discuss/.workflow-active` 粘性指针             | 删除（未引用）                | 活动指针约定           |
-| `modules/{模块}` 模块根                              | `{module_root_glob}`          | 模块路径约定           |
+| 移除的原文                                        | 通用化替换                                           | 出现位置               |
+| ------------------------------------------------- | ---------------------------------------------------- | ---------------------- |
+| `phpunit`                                         | `{test_cmd}`                                         | 验收基线               |
+| `php -l`                                          | `{lint_cmd}`                                         | 验收基线               |
+| `vendor/bin/phpunit modules/{service-name}/tests` | `{test_cmd} {module_root_glob}/{service-name}/tests` | 验收基线               |
+| `php-analyzer`                                    | `{discovery_cmd}`                                    | 模块分析、架构文档产出 |
+| `composer.json`（作为模块清单来源）               | `manifest file`（通用概念）                          | 模块路径约定           |
+| `composer.json` 的 `autoload.psr-4`               | 删除                                                 | 模块清单发现路径       |
+| `Service/Events/Listeners` 跨模块机制             | `{contract_type}` 通道                               | 跨模块交互             |
+| `docs/workflow/{service-name}/` 架构文档目录      | `docs/workflow/{service-name}/`                      | 架构上下文来源         |
+| `phpstan` 默认 DoD                                | "静态分析" 通用占位                                  | 验收基线               |
+| `docs/discuss/.workflow-active` 粘性指针          | 删除（未引用）                                       | 活动指针约定           |
+| `modules/{service-name}` 模块根                   | `{module_root_glob}`                                 | 模块路径约定           |
 
 ## What was redirected（重定向项）
 
-| 原引用                                  | 新引用                                              | 说明                                                              |
-| --------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------- |
-| `/php-workflow {子命令}`                 | `/devops-workflow {子命令}`                            | 所有命令路径重定向                                                    |
-| `php-workflow`（作为 skill 名）          | `dev-workflow`（作为 skill 名）                      | 仅在 `MIGRATION.md` 与原项目历史语境保留                            |
-| `composer.json` 模块清单发现             | `manifest file` + `CLAUDE.md` 运行时声明             | 从硬编码 PSR-4 推断改为运行时项目自声明                                |
-| `php-analyzer` 架构文档产出              | `{discovery_cmd}` 由项目 `CLAUDE.md` 指定           | 不再硬编码 PHP 分析器                                                |
-| `docs/workflow/{模块}/` 架构文档         | `docs/workflow/{模块}/`                         | 命名从"工作流产物"改为"架构产物"                                     |
-| `Service/Events/Listeners` 跨模块机制      | `{contract_type}` 通道（按语言而异）                  | 不再限定具体实现名                                                  |
+| 原引用                                   | 新引用                                    | 说明                                     |
+| ---------------------------------------- | ----------------------------------------- | ---------------------------------------- |
+| `/php-workflow {子命令}`                 | `/devops-workflow {子命令}`               | 所有命令路径重定向                       |
+| `php-workflow`（作为 skill 名）          | `dev-workflow`（作为 skill 名）           | 仅在 `MIGRATION.md` 与原项目历史语境保留 |
+| `composer.json` 模块清单发现             | `manifest file` + `CLAUDE.md` 运行时声明  | 从硬编码 PSR-4 推断改为运行时项目自声明  |
+| `php-analyzer` 架构文档产出              | `{discovery_cmd}` 由项目 `CLAUDE.md` 指定 | 不再硬编码 PHP 分析器                    |
+| `docs/workflow/{service-name}/` 架构文档 | `docs/workflow/{service-name}/`           | 命名从"工作流产物"改为"架构产物"         |
+| `Service/Events/Listeners` 跨模块机制    | `{contract_type}` 通道（按语言而异）      | 不再限定具体实现名                       |
 
 ## Compatibility stance（兼容性立场）
 

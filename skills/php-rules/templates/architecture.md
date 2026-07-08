@@ -30,20 +30,20 @@ Http/Request(Controller)
 
 ## 目录约定
 
-每个模块位于 `modules/{模块}/` 下，使用标准布局。具体的子目录因项目而异，但分层原则固定不变：
+每个模块位于 `modules/{service-name}/` 下，使用标准布局。具体的子目录因项目而异，但分层原则固定不变：
 
-| 层    | 典型目录                                 | 职责                     |
-|------|--------------------------------------|------------------------|
-| 入口   | `src/ServiceProvider.php`            | 模块注册（路由、事件、命令）         |
-| HTTP | `src/Http/[Api]/`、`src/Http/Routes/` | 参数校验、路由、响应格式化          |
-| 业务逻辑 | `src/Action/`                        | 核心业务规则（业务逻辑**唯一**落点）   |
-| 领域模型 | `src/Models/`                        | Eloquent 模型、关联关系、Scope |
-| 事件   | `src/Events/`、`src/Listeners/`       | 领域事件定义与处理器             |
-| 异步   | `src/Jobs/`                          | 队列任务                   |
-| 命令行  | `src/Commands/`                      | Artisan 命令             |
-| 工具   | `src/Classes/`                       | 辅助类、常量、第三方封装           |
-| 资源   | `resources/`                         | 迁移、视图、语言包              |
-| 测试   | `tests/`                             | 测试用例                   |
+| 层       | 典型目录                              | 职责                                 |
+| -------- | ------------------------------------- | ------------------------------------ |
+| 入口     | `src/ServiceProvider.php`             | 模块注册（路由、事件、命令）         |
+| HTTP     | `src/Http/[Api]/`、`src/Http/Routes/` | 参数校验、路由、响应格式化           |
+| 业务逻辑 | `src/Action/`                         | 核心业务规则（业务逻辑**唯一**落点） |
+| 领域模型 | `src/Models/`                         | Eloquent 模型、关联关系、Scope       |
+| 事件     | `src/Events/`、`src/Listeners/`       | 领域事件定义与处理器                 |
+| 异步     | `src/Jobs/`                           | 队列任务                             |
+| 命令行   | `src/Commands/`                       | Artisan 命令                         |
+| 工具     | `src/Classes/`                        | 辅助类、常量、第三方封装             |
+| 资源     | `resources/`                          | 迁移、视图、语言包                   |
+| 测试     | `tests/`                              | 测试用例                             |
 
 新增文件**必须**放入与所属层匹配的现有目录。
 

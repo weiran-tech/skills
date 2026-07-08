@@ -31,7 +31,7 @@
 
 ### 2.2 逐子需求 metadata.md
 
-对 `subRequirements[]` 中每个完整 ID `{域}/{父需求名}#{子需求名}`，按 templates.md §0 解析为路径 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/metadata.md`，读其 `阶段产物引用` 区。
+对 `subRequirements[]` 中每个完整 ID `{service-name}/{父需求名}#{子需求名}`，按 templates.md §0 解析为路径 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/metadata.md`，读其 `阶段产物引用` 区。
 
 ### 2.3 三块数据的实际来源
 
@@ -83,7 +83,7 @@ read docs/discuss/{parent}/.task/{child}/metadata.md
 
 | 范围 | 路径 |
 |------|------|
-| 单域版本（默认） | `docs/discuss/{域}/{父需求名}/.task/.versions/{版本号}/change-manifest.md` |
+| 单域版本（默认） | `docs/discuss/{service-name}/{父需求名}/.task/.versions/{版本号}/change-manifest.md` |
 | 跨域版本（聚合不同时落到一个父需求目录易误导） | `docs/version/{版本号}/change-manifest.md` |
 
 > 落地策略由 document-specialist 在步骤 2 完成后判定：所有子需求 `parentReqId` 域相同落单域路径；跨域时落全局路径。
@@ -169,12 +169,12 @@ document-specialist "
 
 数据来源（严格按此顺序汇聚，不许扩散到其他文件）：
 1. 读 {项目根}/docs/version/{版本号}，提取 versionNumber / status / owner / subRequirements[]
-2. 对 subRequirements[] 中每个 ID 按 templates.md §0 解析为路径，读 docs/discuss/{域}/{父需求名}/.task/{子需求名}/metadata.md
+2. 对 subRequirements[] 中每个 ID 按 templates.md §0 解析为路径，读 docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/metadata.md
 3. 从每个子需求 metadata.md 的「阶段产物引用」区读取 dev-tasks.md / acceptance.md / design-consensus.md 路径
 4. 聚合三块：DDL 变更 / 新增队列 / API 接口
 
 落地路径按以下规则二选一：
-- 所有子需求域相同 → docs/discuss/{域}/{父需求名}/.task/.versions/{版本号}/change-manifest.md
+- 所有子需求域相同 → docs/discuss/{service-name}/{父需求名}/.task/.versions/{版本号}/change-manifest.md
 - 跨域或域分散 → docs/version/{版本号}/change-manifest.md
 
 输出格式（严格遵循，markdown 可直接交付）：

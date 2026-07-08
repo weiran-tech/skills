@@ -9,7 +9,7 @@
 >
 > **ID 解析函数**（所有命令复用）：
 > ```bash
-> # 解析子需求 ID {域}/{父需求名}#{子需求名} → 子需求目录
+> # 解析子需求 ID {service-name}/{父需求名}#{子需求名} → 子需求目录
 > parse_sub_req_id() {
 >   local id="$1"
 >   # 按最后一个 # 拆分（ID 中如含 #，取最后一个为子需求分隔）
@@ -20,7 +20,7 @@
 >   echo "docs/discuss/${domain}/${parent}/.task/${last_hash}"
 > }
 >
-> # 解析父需求 ID {域}/{父需求名} → 父需求目录
+> # 解析父需求 ID {service-name}/{父需求名} → 父需求目录
 > parse_parent_req_id() {
 >   local id="$1"
 >   local domain="${id%%/*}"
@@ -45,31 +45,31 @@
 
 ## §A. `req` 命令族（4 个）
 
-### `/devops-workflow req create {域}/{父需求名}`
+### `/devops-workflow req create {service-name}/{父需求名}`
 
 **用途**：创建父需求目录结构，作为后续子需求的容器。替代 v1 的 `start` 命令。
 
 **处理步骤**：
 1. **解析参数**：
    - 必传：域 + 父需求名（如 `payment/支付渠道重构`）
-   - 缺参 → 报错：`[字段 reqId 缺失] 必须传 {域}/{父需求名} 格式。建议: /devops-workflow req create payment/支付渠道重构`
+   - 缺参 → 报错：`[字段 reqId 缺失] 必须传 {service-name}/{父需求名} 格式。建议: /devops-workflow req create payment/支付渠道重构`
 2. **校验域合法性**：域必须与项目 `manifest file` 中声明的 `{module_root_glob}` 匹配，或在 `docs/workflow/` 已声明的模块清单中存在，否则报错。详见 `discovery.md`
 3. **校验父需求不存在**：
-   - 检查 `docs/discuss/{域}/{父需求名}/` 是否已存在，存在则报错（AC3 + Appendix A）：
-     `[字段 parentReqId {域}/{父需求名}] 父需求已存在。建议: 用 /devops-workflow req show {域}/{父需求名} 查看，或选其他名称`
+   - 检查 `docs/discuss/{service-name}/{父需求名}/` 是否已存在，存在则报错（AC3 + Appendix A）：
+     `[字段 parentReqId {service-name}/{父需求名}] 父需求已存在。建议: 用 /devops-workflow req show {service-name}/{父需求名} 查看，或选其他名称`
 4. **创建目录骨架**：
    ```bash
-   mkdir -p "docs/discuss/{域}/{父需求名}/.task"
+   mkdir -p "docs/discuss/{service-name}/{父需求名}/.task"
    ```
-5. **初始化父需求摘要文件** `docs/discuss/{域}/{父需求名}/.task/parent.md`（元数据壳，含创建时间戳与域/名）
+5. **初始化父需求摘要文件** `docs/discuss/{service-name}/{父需求名}/.task/parent.md`（元数据壳，含创建时间戳与域/名）
 6. **回显**：提示用户下一步用 `/devops-workflow req split {父需求ID}` 进入交互式向导创建子需求
 
 **缺参行为**：缺参立即报错，不创建任何文件。
 
 **错误信息格式**：
-- `[字段 reqId 缺失] 必须传 {域}/{父需求名} 格式。建议: /devops-workflow req create payment/支付渠道重构`
-- `[字段 parentReqId {域}/{父需求名}] 父需求已存在。建议: 用 /devops-workflow req show {域}/{父需求名} 查看`
-- `[字段 domain {域}] 域不在项目 manifest 声明的模块清单中。建议: 从 {module_root_glob} 目录选择合法域`
+- `[字段 reqId 缺失] 必须传 {service-name}/{父需求名} 格式。建议: /devops-workflow req create payment/支付渠道重构`
+- `[字段 parentReqId {service-name}/{父需求名}] 父需求已存在。建议: 用 /devops-workflow req show {service-name}/{父需求名} 查看`
+- `[字段 domain {service-name}] 域不在项目 manifest 声明的模块清单中。建议: 从 {module_root_glob} 目录选择合法域`
 
 **边界情况**：
 - 父需求名含特殊字符（空格、`/`）：建议用 `-` 或 `_` 替代；不阻止但提示
@@ -78,7 +78,7 @@
 
 ---
 
-### `/devops-workflow req show {域}/{父需求名}`
+### `/devops-workflow req show {service-name}/{父需求名}`
 
 **用途**：显示父需求详情及其下子需求列表（含状态 + 版本绑定）。
 
@@ -86,8 +86,8 @@
 1. **解析参数**：
    - 必传：父需求 ID
    - 缺参 → 报错：`[字段 parentReqId 缺失] 必须传父需求 ID。建议: /devops-workflow req show payment/支付渠道重构`
-2. **校验父需求存在**：`docs/discuss/{域}/{父需求名}/.task/parent.md` 必须存在；不存在则报错 `[字段 parentReqId {X}] 父需求不存在。建议: 用 /devops-workflow req list 查看全部父需求`
-3. **扫描子需求**：列出 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/metadata.md` 全部文件
+2. **校验父需求存在**：`docs/discuss/{service-name}/{父需求名}/.task/parent.md` 必须存在；不存在则报错 `[字段 parentReqId {X}] 父需求不存在。建议: 用 /devops-workflow req list 查看全部父需求`
+3. **扫描子需求**：列出 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/metadata.md` 全部文件
 4. **解析每个 metadata.md**：读取 `subReqId / currentStage / currentState / versionBinding` 4 个字段
 5. **输出格式**：
    ```
@@ -133,12 +133,12 @@
 **缺参行为**：无参数命令，不存在缺参。
 
 **边界情况**：
-- 无任何父需求：显示"无父需求。建议: /devops-workflow req create {域}/{父需求名} 创建第一个父需求"
+- 无任何父需求：显示"无父需求。建议: /devops-workflow req create {service-name}/{父需求名} 创建第一个父需求"
 - 部分 metadata.md 字段损坏：用最简信息展示，不阻塞其他父需求
 
 ---
 
-### `/devops-workflow req split {域}/{父需求名}`
+### `/devops-workflow req split {service-name}/{父需求名}`
 
 **用途**：交互式向导逐个创建子需求。向导中途支持 Ctrl+C 退出（AC17/D20）。
 
@@ -147,7 +147,7 @@
    - 必传：父需求 ID
    - 缺参 → 报错：`[字段 parentReqId 缺失] 必须传父需求 ID。建议: /devops-workflow req split payment/支付渠道重构`
 2. **校验父需求存在**：同 `req show`
-3. **扫描现有子需求**：列出 `docs/discuss/{域}/{父需求名}/.task/` 下已存在的子需求名（用于向导重名检查）
+3. **扫描现有子需求**：列出 `docs/discuss/{service-name}/{父需求名}/.task/` 下已存在的子需求名（用于向导重名检查）
 4. **启动交互式向导**（循环询问，直到用户输入 `done` 或 Ctrl+C 退出）：
    ```
    === 子需求创建向导 ===
@@ -174,9 +174,9 @@
    b. 输入子需求描述（非空）
    c. 输入模块影响（可空）
    d. 确认创建（y/n/cancel）
-   e. 创建目录 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/`
+   e. 创建目录 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/`
    f. 写入 metadata.md（8 字段模板，详见 `templates.md`）
-6. **Ctrl+C 处理**：保存已完成创建的子需求到临时清单 `docs/discuss/{域}/{父需求名}/.task/.split-progress`，下次执行 `req split` 时提示"检测到上次未完成的向导，是否继续？(y/n)"，用户选择继续则从断点恢复
+6. **Ctrl+C 处理**：保存已完成创建的子需求到临时清单 `docs/discuss/{service-name}/{父需求名}/.task/.split-progress`，下次执行 `req split` 时提示"检测到上次未完成的向导，是否继续？(y/n)"，用户选择继续则从断点恢复
 7. **回显**：总结创建的子需求数 + 提示用户下一步用 `/devops-workflow version create {版本号}` 绑定子需求
 
 **缺参行为**：缺父需求 ID 立即报错。
@@ -232,7 +232,7 @@
 
 **步骤 4：回写 metadata.md.versionBinding**
 1. 对每个选中的子需求：
-   a. 读 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/metadata.md`
+   a. 读 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/metadata.md`
    b. **冲突检查**（AC6 + Appendix A）：若 `versionBinding` 字段非空 → 报错 `[字段 subReqId {X}] 已绑定版本 {Y}，不可重复绑定。建议: 先 /devops-workflow version show {Y}，或选择其他未绑定子需求`
    c. 回写 `versionBinding: {版本号}` + 更新 `updatedAt: {当前ISO8601}`
    d. **类型校验**：回写时确保 `versionBinding` 是单值字符串，不是数组（AC6）
@@ -499,7 +499,7 @@
 1. **解析子需求 ID**：
    - 缺参 → 报错：
      ```
-     [字段 subReqId 缺失] 必须传子需求ID。建议: 格式 {域}/{父需求名}#{子需求名}
+     [字段 subReqId 缺失] 必须传子需求ID。建议: 格式 {service-name}/{父需求名}#{子需求名}
 
      当前可推进的子需求（扫描自 metadata.md，currentState ≠ COMPLETED）:
        - payment/支付渠道重构#alipay    当前状态: DEVELOPING
@@ -529,7 +529,7 @@
 **缺参行为**：报错 + 列出全部可推进子需求（AC16）。
 
 **错误信息格式**：
-- `[字段 subReqId 缺失] 必须传子需求ID。建议: /devops-workflow next {域}/{父需求名}#{子需求名}`
+- `[字段 subReqId 缺失] 必须传子需求ID。建议: /devops-workflow next {service-name}/{父需求名}#{子需求名}`
 - `[字段 subReqId {X}] 子需求不存在。建议: 用 /devops-workflow req show {父需求ID} 查看`
 - `[字段 versionBinding 空] 子需求 {X} 未绑定版本，无法推进。建议: /devops-workflow version add-sub {V} {X}`
 - `[字段 versionStatus DRAFT 当前版本未启动] 子需求不能推进。建议: /devops-workflow version start {V}`
@@ -569,7 +569,7 @@
 **缺参行为**：报错 + 列出全部待审核子需求（AC16）。
 
 **错误信息格式**：
-- `[字段 subReqId 缺失] 必须传子需求ID。建议: /devops-workflow approve {域}/{父需求名}#{子需求名}`
+- `[字段 subReqId 缺失] 必须传子需求ID。建议: /devops-workflow approve {service-name}/{父需求名}#{子需求名}`
 - `[字段 subReqId {X} 不在审核门状态] 子需求不在审核门状态（currentState 不含 REVIEW）。建议: 用 /devops-workflow next {X} 推进到审核门`
 
 **边界情况**：
@@ -641,7 +641,7 @@
    - **DRAFT / IN_PROGRESS / READY** → 通过门禁，继续步骤 5
    - **RELEASED** → 报错：`[字段 versionStatus RELEASED 当前版本已发布] 不允许 rework。建议: 如需修复请新建子需求并 /devops-workflow version add-sub 加入新版本`
    - **ARCHIVED** → 报错：`[字段 versionStatus ARCHIVED] 版本已永久封存，禁止 rework`
-5. **执行 rework**：详见 `rework.md`，含返工单路径 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/rework/R{n}-{原因}.md`
+5. **执行 rework**：详见 `rework.md`，含返工单路径 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/rework/R{n}-{原因}.md`
 6. **状态回写**：
    - `currentState: COMPLETED → ANALYZING`
    - `currentStage: 5 → 2`
@@ -651,7 +651,7 @@
 **缺参行为**：报错 + 列出可 rework 的子需求（AC16）。
 
 **错误信息格式**：
-- `[字段 subReqId 缺失] 必须传子需求ID。建议: /devops-workflow rework {域}/{父需求名}#{子需求名}`
+- `[字段 subReqId 缺失] 必须传子需求ID。建议: /devops-workflow rework {service-name}/{父需求名}#{子需求名}`
 - `[字段 currentState {X} 非 COMPLETED 状态] rework 要求 COMPLETED 状态。建议: 用 /devops-workflow next {X} 推进到 COMPLETED 后再 rework`
 - `[字段 versionStatus RELEASED 当前版本已发布] 不允许 rework。建议: 新建子需求 + 新版本`
 - `[字段 versionStatus ARCHIVED] 版本已永久封存，禁止 rework`
@@ -680,7 +680,7 @@
      ```
 2. **校验版本存在**：`docs/version/{版本号}` 必须存在
 3. **读 subRequirements 数组**：从版本文件读子需求列表（完整 ID）
-4. **逐子需求聚合**：对每个子需求，扫描 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/` 下的阶段产物
+4. **逐子需求聚合**：对每个子需求，扫描 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/` 下的阶段产物
    - 阶段 2 产物：`analysis/` 目录的 DDL 文件
    - 阶段 4 产物：`plans/` 目录的 Job·MQ 任务清单 + `done/` 目录的 API 实现记录
    - 阶段 5 产物：`acceptance.md` 中确认的 API 接口清单
@@ -763,7 +763,7 @@
 
 **边界情况**：
 - 1 个版本 `--merge`：仍然走合并清单流程，落地 `.merged/` 而非单版本路径（行为等价于"无合并意义但用户显式要求"，提示用户"如不要合并请去掉 --merge"）
-- 版本不在跨域路径（误走单域路径生成的 `docs/discuss/{域}/{父}/.task/.versions/{V}/change-manifest.md`）：扫描两个位置都查，照常合并
+- 版本不在跨域路径（误走单域路径生成的 `docs/discuss/{service-name}/{父}/.task/.versions/{V}/change-manifest.md`）：扫描两个位置都查，照常合并
 - README.md 13 节参考索引同步指向本节
 
 ---
@@ -780,7 +780,7 @@
 3. **重新执行 §1 全部发现**：按优先级依次读
    - 项目根 manifest 文件（package.json / go.mod / pom.xml / Cargo.toml / pyproject.toml 等）
    - 项目根 `CLAUDE.md` 的 `## {字段}` 段
-   - `docs/workflow/{模块}/` 下的模块契约文件（仅 `contract_type` 适用）
+   - `docs/workflow/{service-name}/` 下的模块契约文件（仅 `contract_type` 适用）
 4. **冲突硬阻断**：若两份来源对同一字段给出不同值，按 `discovery.md` §5 三段式报错并停下，**不缓存**
 5. **缺失硬阻断**：任意必需字段在所有来源都找不到，按 `discovery.md` §4 三段式报错并停下，**不缓存**
 6. **成功路径**：写入会话内存 `DiscoveryContext`，输出新字段值给用户
@@ -828,7 +828,7 @@
 - `[字段 versionNumber v1.0] 版本号已存在。建议: /devops-workflow version show v1.0`
 - `[字段 subReqId payment/...#alipay] 已绑定版本 v0.9。建议: 选择其他未绑定子需求`
 - `[字段 versionStatus ARCHIVED] 版本已永久封存，禁止修改。建议: 版本无修改需求`
-- `[字段 subReqId 缺失] 必须传子需求ID。建议: /devops-workflow next {域}/{父需求名}#{子需求名}`
+- `[字段 subReqId 缺失] 必须传子需求ID。建议: /devops-workflow next {service-name}/{父需求名}#{子需求名}`
 
 **禁止写法**：
 - ❌ `参数错误`（无字段名）
@@ -841,10 +841,10 @@
 
 | 命令族 | 命令 | 必传参数 | 主要校验 |
 |--------|------|----------|----------|
-| `req` | `create` | `{域}/{父需求名}` | 父需求不存在 |
-| `req` | `show` | `{域}/{父需求名}` | 父需求存在 |
+| `req` | `create` | `{service-name}/{父需求名}` | 父需求不存在 |
+| `req` | `show` | `{service-name}/{父需求名}` | 父需求存在 |
 | `req` | `list` | （无） | 扫描 |
-| `req` | `split` | `{域}/{父需求名}` | 父需求存在 + 子需求名重名 |
+| `req` | `split` | `{service-name}/{父需求名}` | 父需求存在 + 子需求名重名 |
 | `version` | `create` | `{版本号}` | 版本号未存在 + 子需求归属唯一 |
 | `version` | `show` | `{版本号}` | 版本存在 |
 | `version` | `list` | （无） | 扫描 |

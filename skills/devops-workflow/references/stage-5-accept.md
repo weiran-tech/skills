@@ -11,19 +11,19 @@
 **执行**：
 ```
 verifier "
-对子需求 {域}/{父需求名}#{子需求名} 做收尾验收：
+对子需求 {service-name}/{父需求名}#{子需求名} 做收尾验收：
 1. 确认 metadata.md 任务清单全部已勾选、各任务审查结论均为 PASSED
 2. 全量回归：{test_cmd} 全绿
 3. 对本次变更涉及的文件执行 {lint_cmd} 语法校验全部通过（{static_analysis_cmd} 默认不纳入验收）
-4. 跨模块一致性：对照 docs/discuss/{域}/{父需求名}/.task/{子需求名}/design-consensus.md 与 docs/workflow/cross-module.md，校验 {contract_type} 契约闭合
+4. 跨模块一致性：对照 docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/design-consensus.md 与 docs/workflow/cross-module.md，校验 {contract_type} 契约闭合
 5. 迁移检查：如涉及 {module_root_glob}/*/resources/migrations，确认迁移与回滚可用
-6. 结果写入 docs/discuss/{域}/{父需求名}/.task/{子需求名}/acceptance.md
+6. 结果写入 docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/acceptance.md
 
 执行约束见 SKILL.md 不变量 12：所有 Bash 命令必须可静态分析，禁止 for/while/if/case/here-doc/嵌套 $()。"
 ```
 
 **★ verifier 返回后，主 Agent 必须立刻执行以下动作（缺一不可，禁止静默结束本轮）**：
-1. **读取** verifier 写出的 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/acceptance.md`（以报告文件为准，不以 verifier 返回文本为准）
+1. **读取** verifier 写出的 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/acceptance.md`（以报告文件为准，不以 verifier 返回文本为准）
 2. **回写** metadata.md：阶段 5 状态置 通过 → COMPLETED / 不通过 → 标注问题
 3. **版本聚合（仅当验收通过时执行）**：若 metadata.md.versionBinding 非空（该子需求已绑定版本号），则回写 `docs/version/{版本号}` 的 stageRecord 字段，**追加一行**：
    ```
@@ -43,13 +43,13 @@ verifier "
 
 **流程完成输出**（子需求级）：
 ```
-子需求 [{域}/{父需求名}#{子需求名}] 已完成自动化流程
+子需求 [{service-name}/{父需求名}#{子需求名}] 已完成自动化流程
 
-父需求讨论: docs/discuss/{域}/{父需求名}.md
-设计文档: docs/discuss/{域}/{父需求名}/.task/{子需求名}/design-consensus.md
-状态源: docs/discuss/{域}/{父需求名}/.task/{子需求名}/metadata.md
-逐任务审查: docs/discuss/{域}/{父需求名}/.task/{子需求名}/review/
-收尾验收: docs/discuss/{域}/{父需求名}/.task/{子需求名}/acceptance.md
+父需求讨论: docs/discuss/{service-name}/{父需求名}.md
+设计文档: docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/design-consensus.md
+状态源: docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/metadata.md
+逐任务审查: docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/review/
+收尾验收: docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/acceptance.md
 绑定版本: {版本号}（stageRecord 已聚合该子需求行）
 影响模块: {模块列表}
 

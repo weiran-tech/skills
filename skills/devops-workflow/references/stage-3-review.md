@@ -18,10 +18,10 @@
 ```
 分析与设计已完成，等待人工审核（清单式）。
 
-子需求 ID: {域}/{父需求名}#{子需求名}
-设计文档: docs/discuss/{域}/{父需求名}/.task/{子需求名}/design-consensus.md
-任务拆分: docs/discuss/{域}/{父需求名}/.task/{子需求名}/dev-tasks.md
-{如有冲突} 冲突记录: docs/discuss/{域}/{父需求名}/.task/{子需求名}/conflicts.md
+子需求 ID: {service-name}/{父需求名}#{子需求名}
+设计文档: docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/design-consensus.md
+任务拆分: docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/dev-tasks.md
+{如有冲突} 冲突记录: docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/conflicts.md
 
 主 Agent 自查结论: {逐项 ✓/✗ + 缺项说明}
 未决项: {N 条，处置摘要}
@@ -30,7 +30,7 @@
 操作: 逐项核对后执行 /devops-workflow approve {子需求ID}；若有缺项，先让其补充再审
 ```
 
-**approve 通过后**：在 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/design-consensus.md` 末尾追加 `## 设计确认: APPROVED`，然后**回写 `metadata.md`**：
+**approve 通过后**：在 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/design-consensus.md` 末尾追加 `## 设计确认: APPROVED`，然后**回写 `metadata.md`**：
 - `currentState`: `PENDING_DESIGN_REVIEW` → `DEVELOPING`
 - `updatedAt`: 更新为当前时间（ISO 8601，例 `2026-07-06T14:30:00+08:00`）
 
@@ -43,10 +43,10 @@
 
 **缺参行为**：`/devops-workflow approve` 无参时 → 立即停止并报错：
 ```
-[字段 子需求ID] 必填，不能为空。建议：传入 /devops-workflow approve {域}/{父需求名}#{子需求名}。
+[字段 子需求ID] 必填，不能为空。建议：传入 /devops-workflow approve {service-name}/{父需求名}#{子需求名}。
 ```
 
-并在报错后扫描 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/metadata.md` 列出所有 `currentState == PENDING_DESIGN_REVIEW` 的子需求作为可选项：
+并在报错后扫描 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/metadata.md` 列出所有 `currentState == PENDING_DESIGN_REVIEW` 的子需求作为可选项：
 ```
 当前可审核的子需求：
 - payment/支付渠道重构#alipay  (design-consensus: docs/discuss/payment/支付渠道重构/.task/alipay/design-consensus.md)
