@@ -1,5 +1,5 @@
 ---
-name: dev-discuss
+name: devops-discuss
 description: 需求变更讨论技能。通过多轮对话分析需求变更的目标、现有流程、影响范围和推荐改动方向，讨论完成后自动保存结构化文档到 docs/discuss 目录。当用户说 "讨论需求变更"、"需求讨论"、"讨论变更" 时触发。
 ---
 

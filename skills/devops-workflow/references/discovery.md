@@ -1,12 +1,12 @@
 # Runtime Discovery Engine（运行时上下文发现引擎）
 
-> 本文件描述 `/dev-workflow` skill 在执行任意命令前如何**运行时**发现项目语言、测试/校验/静态分析命令、模块布局、跨模块契约类型。所有发现结果缓存于会话内存内，**不需要单独的 config 文件**。命令执行时随用随查。
+> 本文件描述 `/devops-workflow` skill 在执行任意命令前如何**运行时**发现项目语言、测试/校验/静态分析命令、模块布局、跨模块契约类型。所有发现结果缓存于会话内存内，**不需要单独的 config 文件**。命令执行时随用随查。
 
 ---
 
 ## §1. Discovery sources（发现源，按优先级合并）
 
-任何 `/dev-workflow` 命令执行前必须按以下顺序解析必需字段：
+任何 `/devops-workflow` 命令执行前必须按以下顺序解析必需字段：
 
 1. **项目 manifest 文件**（根目录）：读取 `engines` / `scripts` / `workspaces` 等字段，识别语言和测试/校验命令
 2. **`CLAUDE.md`**（项目根）：项目级指令文件，可显式覆盖 manifest 默认推断
@@ -146,7 +146,7 @@ Node 项目中 `pnpm-workspace.yaml` 的 `packages` 字段与 `package.json#work
   - `manifest` 文件 mtime 变更
   - `CLAUDE.md` 文件 mtime 变更
   - `docs/workflow/` 下任何模块契约文件 mtime 变更
-  - 用户显式调用 `/dev-workflow discovery refresh`（保留命令，见 §9）
+  - 用户显式调用 `/devops-workflow discovery refresh`（保留命令，见 §9）
 
 > **`{discovery_cmd}` 触发**：当发现结果失效或初次安装本 skill 时，应提示用户跑 `{discovery_cmd}` 重新生成 `docs/workflow/` 全部产物。
 
@@ -174,7 +174,7 @@ Node 项目中 `pnpm-workspace.yaml` 的 `packages` 字段与 `package.json#work
 为支持长会话中的发现刷新，保留以下命令（详见 `commands.md` §C）：
 
 ```
-/dev-workflow discovery refresh
+/devops-workflow discovery refresh
 ```
 
 **用途**：强制重新执行 §1 全部发现逻辑，清空 §7 缓存，从头解析所有必需字段。

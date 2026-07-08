@@ -1,26 +1,20 @@
 ## 安装
 
 ```
-npx skills add weiran-tech/agent-skills --skill nuxt3-qa-analysis
+npx skills add weiran-tech/skills --skill nuxt3-qa-analysis
 ```
 
-## 目录说明
+## 说明
 
 ```
-├── bun         # bun 项目
-│   ├── bun-analyzer
-│   └── bun-rules
-├── java-ss     # Java 单独服务 Standalone Service
-├── php         # PHP 相关
-│   ├── api-scan
-│   ├── arch-analyzer
-│   ├── arch-rules
-│   ├── change-discuss
-│   └── dead-routes
-└── skills      # 后续要拆离
+bun-*         # bun 项目
+java-ss-*     # Java 单独服务 Standalone Service
+php-*         # PHP 相关
+devops-*      # 开发相关
+arch-*        # 架构部分
 ```
 
-## 清单说明
+清单
 
 ```
 # 前端

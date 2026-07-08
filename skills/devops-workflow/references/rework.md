@@ -6,7 +6,7 @@ v2 重构后，返工按**子需求**粒度执行（spec C10），不再涉及 v
 
 ---
 
-## `/dev-workflow rework {子需求ID}`
+## `/devops-workflow rework {子需求ID}`
 
 ### 处理步骤
 
@@ -15,7 +15,7 @@ v2 重构后，返工按**子需求**粒度执行（spec C10），不再涉及 v
 2. **校验子需求存在**：`docs/discuss/{域}/{父需求名}/.task/{子需求名}/metadata.md` 必须存在；不存在报错 `[字段 subReqId {X}] 子需求不存在`。
 
 3. **校验子需求状态**：读 `metadata.md.currentState`，要求 `== COMPLETED`
-   - 非 COMPLETED → 报错：`[字段 currentState {X}] rework 要求 COMPLETED 状态。建议：用 /dev-workflow next {X} 推进到 COMPLETED 后再 rework`
+   - 非 COMPLETED → 报错：`[字段 currentState {X}] rework 要求 COMPLETED 状态。建议：用 /devops-workflow next {X} 推进到 COMPLETED 后再 rework`
 
 4. **强门禁 — 版本状态校验**（AC19/D22，**先于返工单写入**）：
 
@@ -24,7 +24,7 @@ v2 重构后，返工按**子需求**粒度执行（spec C10），不再涉及 v
    | `DRAFT` | 通过 | 允许 rework |
    | `IN_PROGRESS` | 通过 | 允许 rework |
    | `READY` | 通过 | 允许 rework |
-   | `RELEASED` | **拒绝** | `[字段 versionStatus RELEASED] 版本已发布，禁止 rework。建议：如需修复请新建子需求并 /dev-workflow version add-sub 加入新版本` |
+   | `RELEASED` | **拒绝** | `[字段 versionStatus RELEASED] 版本已发布，禁止 rework。建议：如需修复请新建子需求并 /devops-workflow version add-sub 加入新版本` |
    | `ARCHIVED` | **拒绝** | `[字段 versionStatus] 版本已归档，禁止 rework。建议：版本已永久封存，需修复请新建版本` |
 
    - 校验来源：读 `metadata.md.versionBinding` → 读 `docs/version/{版本号}.status`
@@ -51,7 +51,7 @@ v2 重构后，返工按**子需求**粒度执行（spec C10），不再涉及 v
    - 任务清单区追加"返工 R{N}"标记
    - 阶段产物引用表追加新返工单路径
 
-10. **之后用 `/dev-workflow next {子需求ID}` 正常推进重跑**——设计级先过阶段 3 重审，复杂任务重出 plan，再 code → CR → 收尾验收
+10. **之后用 `/devops-workflow next {子需求ID}` 正常推进重跑**——设计级先过阶段 3 重审，复杂任务重出 plan，再 code → CR → 收尾验收
 
 ---
 
@@ -157,11 +157,11 @@ rework 命令错误信息统一三段式（AC18/D21）：
 
 | 错误场景 | 错误信息 |
 |---------|---------|
-| 子需求不存在 | `[字段 subReqId {X}] 子需求不存在。建议：用 /dev-workflow req show {父需求ID} 查看` |
-| 非 COMPLETED 状态 | `[字段 currentState {X}] rework 要求 COMPLETED 状态。建议：用 /dev-workflow next {X} 推进到 COMPLETED 后再 rework` |
-| 版本已发布 | `[字段 versionStatus RELEASED] 版本已发布，禁止 rework。建议：如需修复请新建子需求并 /dev-workflow version add-sub 加入新版本` |
+| 子需求不存在 | `[字段 subReqId {X}] 子需求不存在。建议：用 /devops-workflow req show {父需求ID} 查看` |
+| 非 COMPLETED 状态 | `[字段 currentState {X}] rework 要求 COMPLETED 状态。建议：用 /devops-workflow next {X} 推进到 COMPLETED 后再 rework` |
+| 版本已发布 | `[字段 versionStatus RELEASED] 版本已发布，禁止 rework。建议：如需修复请新建子需求并 /devops-workflow version add-sub 加入新版本` |
 | 版本已归档 | `[字段 versionStatus] 版本已归档，禁止 rework。建议：版本已永久封存，需修复请新建版本` |
-| 缺参 | `[字段 subReqId] 缺失。建议：/dev-workflow rework {域}/{父需求名}#{子需求名}` |
+| 缺参 | `[字段 subReqId] 缺失。建议：/devops-workflow rework {域}/{父需求名}#{子需求名}` |
 
 ---
 
@@ -184,7 +184,7 @@ rework 是**显式人工触发**，不自动判定"要返工"。
 对 RELEASED 版本的子需求执行 rework → 报错：
 
 ```
-[字段 versionStatus RELEASED] 版本已发布，禁止 rework。建议：如需修复请新建子需求并 /dev-workflow version add-sub 加入新版本
+[字段 versionStatus RELEASED] 版本已发布，禁止 rework。建议：如需修复请新建子需求并 /devops-workflow version add-sub 加入新版本
 ```
 
 对 ARCHIVED 版本的子需求执行 rework → 报错：

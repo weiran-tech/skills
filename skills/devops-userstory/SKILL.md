@@ -1,5 +1,5 @@
 ---
-name : dev-userstory
+name : devops-userstory
 description : 根据服务流程/约定限制生成用户故事
 ---
 

@@ -1,5 +1,5 @@
 ---
-name : dev-task
+name : devops-task
 description : 根据需求讨论文档生成可执行开发任务清单
 ---
 

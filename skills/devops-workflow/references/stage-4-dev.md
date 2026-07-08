@@ -1,6 +1,6 @@
 # 阶段 4：开发与逐任务审查（DEVELOPING）
 
-> 执行阶段 4 / 处理 `/dev-workflow approve` 的 plan 或 CR 分支前读本文件。产出物根路径见 templates.md。
+> 执行阶段 4 / 处理 `/devops-workflow approve` 的 plan 或 CR 分支前读本文件。产出物根路径见 templates.md。
 
 **核心原则：每任务即审、CR 问题人工确认后才改写。编码是否并行由 Claude 自行判断；CR 人工门永远逐任务。** 任务 = dev-tasks.md 中一个可独立交付的工作项（通常一个模块的一组改动）。无独立分支，全部在当前 feature 分支推进。
 
@@ -11,7 +11,7 @@
 1. **读产出**：读取子 agent 写出的产出文件（以文件为准，不以子 agent 返回文本为准）
 2. **回写状态**：更新 metadata.md 任务状态行
 3. **向用户输出结果摘要**：简述产出内容（编码改了什么 / CR 扫出几条 / plan 要点等）
-4. **明确告知下一步**：用户该执行什么命令（`/dev-workflow approve` / `/dev-workflow next`），或主 Agent 将自动执行什么
+4. **明确告知下一步**：用户该执行什么命令（`/devops-workflow approve` / `/devops-workflow next`），或主 Agent 将自动执行什么
 
 **违反此协议的典型表现**：子 agent 跑完后只更新了 metadata.md 就结束、或只说"已完成"但不展示结果、或不告诉用户下一步该做什么。这些都是 BUG。
 
@@ -33,7 +33,7 @@
 - **复杂任务**：编码前先产出**任务级详细设计（plan/LLD）**，人工确认后再编码。判断复杂的信号：跨多文件/多层、涉及核心交易或资金链路、改动既有关键流程、有并发/一致性/迁移风险、设计有未决项。
 - 拿不准时按复杂处理（出 plan 比返工便宜）。
 
-plan 是**编码前的设计评审门**：把"方向错"挡在写代码之前，比事后 CR 便宜。plan 由 `architect`/`planner` 产出（只读、不写业务代码），人工 `/dev-workflow approve` 确认后才编码。
+plan 是**编码前的设计评审门**：把"方向错"挡在写代码之前，比事后 CR 便宜。plan 由 `architect`/`planner` 产出（只读、不写业务代码），人工 `/devops-workflow approve` 确认后才编码。
 
 ## 每个任务的闭环（含可选 plan 门）
 
@@ -44,7 +44,7 @@ TODO
  └─ 复杂 → 出 plan/LLD（architect/planner） │
           ▼ PLANNING                        │
           停 PENDING_PLAN_REVIEW ←人工确认门  │
-          │ 人工 /dev-workflow approve       │
+          │ 人工 /devops-workflow approve       │
           ▼ PLAN_CONFIRMED                   │
  ┌────────────────────────────────────────┘
  │ ① 编码（executor；简单任务对照 design-consensus，复杂任务对照已确认 plan；并行/串行由 Claude 判断）
@@ -53,7 +53,7 @@ TODO
  │ ③ CR 扫描（单个 code-reviewer，只读，产出问题清单，不改代码）
  ▼ CR_SCANNED  ←—— 停在这里，进入【人工确认门】，状态 PENDING_CR_REVIEW（逐任务，不合并）
  │ ④ 人工逐条裁决问题（采纳 / 忽略 / 修改），裁决写回 CR 报告
- ▼ CR_CONFIRMED  ←—— 由 /dev-workflow approve 确认后推进
+ ▼ CR_CONFIRMED  ←—— 由 /devops-workflow approve 确认后推进
  │ ⑤ 改写（单个 executor）：只修复「已采纳」的问题
  ▼ REWRITING
  │ ⑥ 复验：{test_cmd} + {lint_cmd} 绿，且已采纳问题确已修复
@@ -83,7 +83,7 @@ architect "
 4. **明确告知**：
    ```
    plan 已保存到 docs/discuss/{域}/{父需求名}/.task/{子需求名}/plans/{文件名}
-   请审阅后执行 /dev-workflow approve 确认，或指出需要调整的地方
+   请审阅后执行 /devops-workflow approve 确认，或指出需要调整的地方
    ```
 
 plan 不达标（缺项/方向问题）→ 打回重出，不进编码。确认后置 **PLAN_CONFIRMED** 再编码。
@@ -144,20 +144,20 @@ code-reviewer "
    - **有问题**：逐条列出 `#编号 [严重度] 文件:行 — 一句话问题`，然后明确提示：
      ```
      请逐条裁决每个问题：ACCEPTED（要改）/ REJECTED（不改）/ MODIFIED（改法调整）
-     裁决完成后执行 /dev-workflow approve 推进
+     裁决完成后执行 /devops-workflow approve 推进
      ```
    - **零问题（PASSED）**：输出「CR 通过，无问题项，无需裁决」，然后明确提示：
      ```
-     执行 /dev-workflow approve 确认并进入复验/勾选
+     执行 /devops-workflow approve 确认并进入复验/勾选
      ```
 4. **停在 PENDING_CR_REVIEW 等待用户**，不自动进入改写
 
-**自检：如果你的输出中没有包含 `/dev-workflow approve` 这个字符串，说明你漏了第 3 步，立刻补上。**
+**自检：如果你的输出中没有包含 `/devops-workflow approve` 这个字符串，说明你漏了第 3 步，立刻补上。**
 
 ### ④ 人工确认门（PENDING_CR_REVIEW）
 - 用户逐条裁决每个问题：`ACCEPTED`（要改）/ `REJECTED`（不改，附理由）/ `MODIFIED`（改法调整，附说明）
 - 裁决方式二选一：直接在 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/review/{模块名}-{任务序号}.md` 的『人工裁决』区标注，或口头告知由主 Agent 回填
-- 全部裁决完成后，用户执行 `/dev-workflow approve`（多子需求加 `#子需求ID`）锁定裁决；主 Agent 据此把任务状态置 **CR_CONFIRMED**
+- 全部裁决完成后，用户执行 `/devops-workflow approve`（多子需求加 `#子需求ID`）锁定裁决；主 Agent 据此把任务状态置 **CR_CONFIRMED**
 - **零问题 / 全部 REJECTED**（无需改写）→ `approve` 直接跳过改写⑤，进入复验⑥与勾选
 
 ### ⑤ 改写（仅改已采纳项，单 executor）
@@ -177,7 +177,7 @@ executor "
 2. **dev-tasks.md**：确认该任务下所有子项 `[ ]` 均已勾成 `[x]`（executor 漏勾的补勾）
 3. **版本聚合视图（如适用）**：若该子需求所属版本中所有子需求均 DONE，更新 `docs/version/{版本号}` 阶段为「5 收尾验收」就绪
 
-> **回写是阻塞步骤**：未完成上述回写，不得开始下一个子需求/下一波。每个**中间状态**变化（CODING / CR_SCANNED / CR_CONFIRMED / REWRITING）也要即时写回 metadata.md 任务状态行，保证 `/dev-workflow status` 任何时刻反映真实进度。
+> **回写是阻塞步骤**：未完成上述回写，不得开始下一个子需求/下一波。每个**中间状态**变化（CODING / CR_SCANNED / CR_CONFIRMED / REWRITING）也要即时写回 metadata.md 任务状态行，保证 `/devops-workflow status` 任何时刻反映真实进度。
 
 ## 关键规则
 - **复杂任务编码前必须出 plan 并人工确认**：简单任务对照 design-consensus 直接编码；复杂任务先 architect/planner 出 LLD → 人工 approve → 才编码。拿不准按复杂处理。plan 维度按**子需求**划分，每个子需求独立出 plan 与评审
@@ -187,4 +187,4 @@ executor "
 - **CR 问题不经人工确认，绝不改写**；code-reviewer 永远只产出清单，改写永远是另一个 executor 按人工采纳清单执行
 - 被 REJECTED 的问题不得改动；被 MODIFIED 的按人工说明改
 - **进度即时回写（强制）**：每次状态变化都立刻写回 metadata.md 任务状态行，并同步 dev-tasks.md 子项勾选；回写未完成不得推进下一个任务。`metadata.md` 是子需求**状态**权威源，`dev-tasks.md` 勾选是**细粒度子项**清单，两者必须一致
-- 全部子需求 DONE 后更新 metadata.md，输出开发汇总，等待 `/dev-workflow next` 进入阶段 5 收尾验收（见 stage-5-accept.md）
+- 全部子需求 DONE 后更新 metadata.md，输出开发汇总，等待 `/devops-workflow next` 进入阶段 5 收尾验收（见 stage-5-accept.md）

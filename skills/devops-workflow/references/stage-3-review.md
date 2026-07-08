@@ -1,6 +1,6 @@
 # 阶段 3：设计审核（PENDING_DESIGN_REVIEW）
 
-> 执行阶段 3 / 处理 `/dev-workflow approve {子需求ID}` 的设计审核分支前读本文件。
+> 执行阶段 3 / 处理 `/devops-workflow approve {子需求ID}` 的设计审核分支前读本文件。
 
 **审核门在子需求级。** 5 阶段流程跑在每个子需求上，版本只是跨域聚合视图（spec C8/D10）。`approve` 必须显式传子需求 ID；不允许跳过审核或粘性活动指针（spec C6/D8）。
 
@@ -27,7 +27,7 @@
 未决项: {N 条，处置摘要}
 复杂任务: {列出将在阶段 4 出 plan 的任务}
 
-操作: 逐项核对后执行 /dev-workflow approve {子需求ID}；若有缺项，先让其补充再审
+操作: 逐项核对后执行 /devops-workflow approve {子需求ID}；若有缺项，先让其补充再审
 ```
 
 **approve 通过后**：在 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/design-consensus.md` 末尾追加 `## 设计确认: APPROVED`，然后**回写 `metadata.md`**：
@@ -38,12 +38,12 @@
 ```
 设计审核通过。子需求 {子需求ID} 已进入 DEVELOPING 状态。
 
-下一步: 执行 /dev-workflow next {子需求ID} 进入阶段 4（开发与任务闭环）。
+下一步: 执行 /devops-workflow next {子需求ID} 进入阶段 4（开发与任务闭环）。
 ```
 
-**缺参行为**：`/dev-workflow approve` 无参时 → 立即停止并报错：
+**缺参行为**：`/devops-workflow approve` 无参时 → 立即停止并报错：
 ```
-[字段 子需求ID] 必填，不能为空。建议：传入 /dev-workflow approve {域}/{父需求名}#{子需求名}。
+[字段 子需求ID] 必填，不能为空。建议：传入 /devops-workflow approve {域}/{父需求名}#{子需求名}。
 ```
 
 并在报错后扫描 `docs/discuss/{域}/{父需求名}/.task/{子需求名}/metadata.md` 列出所有 `currentState == PENDING_DESIGN_REVIEW` 的子需求作为可选项：
@@ -52,5 +52,5 @@
 - payment/支付渠道重构#alipay  (design-consensus: docs/discuss/payment/支付渠道重构/.task/alipay/design-consensus.md)
 - order/订单取消优化#子需求1   (design-consensus: docs/discuss/order/订单取消优化/.task/子需求1/design-consensus.md)
 
-请选择后执行：/dev-workflow approve {子需求ID}
+请选择后执行：/devops-workflow approve {子需求ID}
 ```

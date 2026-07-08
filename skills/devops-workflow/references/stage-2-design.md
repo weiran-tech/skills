@@ -51,6 +51,6 @@ ralph: "针对子需求 {域}/{父需求名}#{子需求名}，读取 docs/discus
 执行约束见 SKILL.md 不变量 12：Bash 命令必须可静态分析；产出物只落项目内 .task/。"
 ```
 
-完成后更新 metadata.md：`currentStage = 2`、`currentState = PENDING_DESIGN_REVIEW`，同步刷新 `updatedAt`，并在「阶段产物引用」表登记 `analysis/` 和 `design.md` 路径（templates.md §1）。随后输出设计摘要，等待用户 `/dev-workflow approve {子需求ID}`（审核走阶段 3，见 stage-3-review.md）。
+完成后更新 metadata.md：`currentStage = 2`、`currentState = PENDING_DESIGN_REVIEW`，同步刷新 `updatedAt`，并在「阶段产物引用」表登记 `analysis/` 和 `design.md` 路径（templates.md §1）。随后输出设计摘要，等待用户 `/devops-workflow approve {子需求ID}`（审核走阶段 3，见 stage-3-review.md）。
 
 > **设计分两层**：design-consensus = 共识/契约层（小需求够用）；复杂任务的实现细节留给阶段 4 的任务级 plan/LLD。详见 stage-4-dev.md。

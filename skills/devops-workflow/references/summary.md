@@ -1,18 +1,18 @@
 # summary：版本级交付对接清单
 
-> 处理 `/dev-workflow summary [版本号]` 时读本文件。用途：对已 READY 或 RELEASED 的版本，聚合其下所有子需求的 DDL 变更、新增队列、API 接口清单，输出一份对接清单分发给 DBA / 运维 / 前端（AC9）。粒度对齐 spec C10：`rework` 按子需求，`summary` 按版本聚合。
+> 处理 `/devops-workflow summary [版本号]` 时读本文件。用途：对已 READY 或 RELEASED 的版本，聚合其下所有子需求的 DDL 变更、新增队列、API 接口清单，输出一份对接清单分发给 DBA / 运维 / 前端（AC9）。粒度对齐 spec C10：`rework` 按子需求，`summary` 按版本聚合。
 
 ---
 
 ## §1. 命令形式
 
 ```
-/dev-workflow summary {版本号}
+/devops-workflow summary {版本号}
 ```
 
 - **必传版本号**（spec D8：无活动指针；缺参报错）
 - 缺参时主 Agent 必须立即报错 + 扫描 `docs/version/` 列出所有存在的版本号 + 列出哪些版本状态 ∈ {IN_PROGRESS, READY, RELEASED} 适合产出清单
-- 错误信息三段式：`[字段 command.args] 缺少版本号。建议：执行 /dev-workflow version list 查可用版本；或直接传 /dev-workflow summary {版本号}`
+- 错误信息三段式：`[字段 command.args] 缺少版本号。建议：执行 /devops-workflow version list 查可用版本；或直接传 /devops-workflow summary {版本号}`
 
 ---
 
@@ -47,13 +47,13 @@
 
 ## §3. 执行流程（静态可分析）
 
-主 Agent 收到 `/dev-workflow summary {版本号}` 后：
+主 Agent 收到 `/devops-workflow summary {版本号}` 后：
 
 ### 步骤 1：解析与校验
 
 ```
 read {项目根}/docs/version/{版本号}
-  ├─ 不存在 → 报错 [字段 version.file] {版本号} 不存在。建议：执行 /dev-workflow version list 查可用版本
+  ├─ 不存在 → 报错 [字段 version.file] {版本号} 不存在。建议：执行 /devops-workflow version list 查可用版本
   └─ 存在 → 提取 versionNumber / status / owner / subRequirements[]
        ├─ status ∈ {DRAFT, ARCHIVED} → 报错（见 §6 错误矩阵）
        └─ status ∈ {IN_PROGRESS, READY, RELEASED} → 进入步骤 2
@@ -90,7 +90,7 @@ read docs/discuss/{parent}/.task/{child}/metadata.md
 
 ### 步骤 5：用户可触发的多版本合并（可选）
 
-**所有相关版本 RELEASED 后**，用户可主动调用 `/dev-workflow summary --merge {版本号A} {版本号B} ...` 出需求级合并清单：把各版本 change-manifest.md 的三块拼起来，每行带 `(来源: {版本号} / {子需求ID})` 标注。此命令不自动触发，仅在用户显式传 `--merge` 时启用。
+**所有相关版本 RELEASED 后**，用户可主动调用 `/devops-workflow summary --merge {版本号A} {版本号B} ...` 出需求级合并清单：把各版本 change-manifest.md 的三块拼起来，每行带 `(来源: {版本号} / {子需求ID})` 标注。此命令不自动触发，仅在用户显式传 `--merge` 时启用。
 
 ---
 
@@ -197,12 +197,12 @@ document-specialist "
 
 | 场景 | 错误信息（三段式） | 建议 |
 |------|-------------------|------|
-| 版本文件不存在 | `[字段 version.file] {版本号} 不存在` | 执行 `/dev-workflow version list` 查可用版本 |
+| 版本文件不存在 | `[字段 version.file] {版本号} 不存在` | 执行 `/devops-workflow version list` 查可用版本 |
 | 状态 = DRAFT | `[字段 version.status] {版本号} 仍为 DRAFT，子需求尚未编码` | 先推进子需求到阶段 4，再触发 summary |
 | 状态 = ARCHIVED | `[字段 version.status] {版本号} 已 ARCHIVED，永久封存禁止输出` | 建新版本或新子需求 |
 | 子需求 metadata.md 缺失 | `[字段 subReq.metadata] {子需求ID} metadata.md 不存在` | 该子需求跳过聚合，写入「缺失子需求清单」；不阻断整版本输出 |
 | 跨域版本未指定落点 | `[字段 output.path] {版本号} 含 {N} 个域，需二选一` | 主 Agent 自动落 `docs/version/{版本号}/change-manifest.md`（跨域默认全局） |
-| 缺参（无版本号） | `[字段 command.args] 缺少版本号` | 执行 `/dev-workflow version list` 查可用版本；或直接传 `/dev-workflow summary {版本号}` |
+| 缺参（无版本号） | `[字段 command.args] 缺少版本号` | 执行 `/devops-workflow version list` 查可用版本；或直接传 `/devops-workflow summary {版本号}` |
 
 ---
 
@@ -214,7 +214,7 @@ document-specialist "
 
 | 产物 | 命令 | 性质 | 受众 |
 |------|------|------|------|
-| change-manifest.md | `/dev-workflow summary {版本号}` | 事实清单（DDL/Job/API） | DBA + 前端 + 运维 |
+| change-manifest.md | `/devops-workflow summary {版本号}` | 事实清单（DDL/Job/API） | DBA + 前端 + 运维 |
 | release-notes / 上线说明 | release-docs skill（外部） | 操作说明（开关/密钥/顺序/风险） | 运维上线负责人 |
 
 > 两者不重复。summary 给出「改了什么」；release-docs 给出「怎么改 / 怎么回滚」。
@@ -223,7 +223,7 @@ document-specialist "
 
 ## §8. 多版本合并清单（用户主动触发）
 
-`/dev-workflow summary --merge {版本号A} {版本号B} ...` — 仅在用户显式传 `--merge` 时启用。
+`/devops-workflow summary --merge {版本号A} {版本号B} ...` — 仅在用户显式传 `--merge` 时启用。
 
 ### 用途
 
