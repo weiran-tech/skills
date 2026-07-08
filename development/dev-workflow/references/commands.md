@@ -860,9 +860,6 @@
 | 保留 | `summary` | `{版本号}` | 版本存在 + ∈ {IN_PROGRESS/READY/RELEASED} |
 | 保留 | `summary --merge` | `{版本号A} {版本号B} ...` | 全部版本 change-manifest.md 存在 + 全部 RELEASED |
 | 保留 | `discovery refresh` | （无） | 清空 §7 缓存，重跑 §1 发现 |
-| ❌ 删除 | `use` | — | 报错"已废弃" |
-| ❌ 删除 | `split` | — | 报错"已废弃" |
-| ❌ 删除 | `start` | — | 报错"已废弃" |
 
 **计数修正**：
 - req：create / show / list / split = **4 个**
