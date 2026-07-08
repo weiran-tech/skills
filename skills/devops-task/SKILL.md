@@ -19,11 +19,11 @@ description : 根据需求讨论文档生成可执行开发任务清单
 
 ### 保存位置
 
-保存到当前需求目录下的 `tasks.md`
+保存到当前目录下的 `./.detail/tasks.md`
 
 ### 更新文档
 
-任务整体开发并验收完毕后更新相关的设计文档 docs/workflow/{service-name}/[business|flows|overview|suggest].md 文件
+任务整体开发并验收完毕后更新相关的设计文档 docs/workflow/{service-name}/{business|flows|overview|suggest}.md 文件
 
 - 读取 `docs/workflow/{service-name}/overview.md`, 确定影响模块
 - 确定需要更新的文档文件, 辅助更新内容
@@ -80,7 +80,7 @@ description : 根据需求讨论文档生成可执行开发任务清单
 
 ## 5. 文档更新
 
-- [ ] **7.1** 更新 `docs/workflow/xx/xx.md` — 更新的概述
+- [ ] **5.1** 更新 `docs/workflow/{service-name}/x.md` — 更新的概述
 
 ## 任务依赖关系
 

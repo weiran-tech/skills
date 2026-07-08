@@ -1,7 +1,7 @@
 ## 安装
 
 ```
-npx skills add weiran-tech/skills --skill nuxt3-qa-analysis
+npx skills add weiran-tech/skills --skill devops-discuss
 ```
 
 ## 说明
