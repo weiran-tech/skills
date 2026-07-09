@@ -1,407 +1,228 @@
-# Workflow — PHP 单体多模块需求开发全流程编排（v2 版本制度）
+# Workflow — PHP 单体多模块需求开发全流程编排
 
-> **⚠️ v2 不兼容 v1；旧数据请自行清理**
->
-> 本 skill 已从「里程碑（milestone）制度」重构为「版本（version）制度」。
-> 旧 `docs/discuss/.workflow-active` 粘性指针、旧 `progress.md` 状态源、旧里程碑嵌套目录、旧 `use / split / start` 命令 —— 全部硬切换删除，无迁移脚本、无双轨共存、无适配层（spec C9/D11）。
->
-> 存量 v1 数据（`docs/discuss/{service-name}/{需求名}/.task/progress.md`、`docs/discuss/{service-name}/{需求名}/.task/milestones/`、`docs/discuss/.workflow-active`）视为遗留，请用户自行清理或保留为只读历史。
+状态机驱动的开发流程 skill。把"需求讨论 → 分析设计 → 开发 → 审查 → 验收"串成一个统一入口，用 `progress.md` 记录状态，每次 `/workflow next` 自动决定下一步调度哪个 agent、传什么参数。
 
-状态机驱动的开发流程 skill。把「**父需求 → 子需求（5 阶段）→ 版本聚合**」串成一个统一入口，每个子需求由 `metadata.md` 记录状态，版本通过 `docs/version/{版本号}` 聚合跨域子需求；每次 `/php-workflow next {子需求ID}` 显式指定推进对象，自动决定下一步调度哪个 agent、传什么参数。
-
-面向伪多模块单体项目：代码都在同一仓库 `modules/{service-name}` 下，跨模块走 Events/Listeners + Service，审查按模块路径过滤 diff，架构上下文取自 `docs/workflow/{module}/`（php-analyzer 产出）。测试/校验等具体命令默认按 PHP 工具链（phpunit / php -l），可按项目配置替换。
+面向伪多模块单体项目：代码都在同一仓库 `modules/{模块}` 下，跨模块走 Events/Listeners + Service，审查按模块路径过滤 diff，架构上下文取自 `docs/{module}/`（arch-analyzer 产出）。测试/校验等具体命令默认按 PHP 工具链（phpunit / php -l），可按项目配置替换。
 
 ---
 
-## 设计理念：版本 vs 里程碑
+## 设计理念
 
-v1 的「里程碑」是单父需求下的多个交付切片（嵌套目录 `milestones/{M}/`），v2 的「版本」是**跨父需求、跨业务域**的发布批次聚合容器（全局文件 `docs/version/{版本号}`）。两者核心差异：
-
-| 维度 | 版本（v2，新） | 里程碑（v1，已废弃） |
-|------|---------------|---------------------|
-| **容器粒度** | 跨父需求聚合：版本可同时包含来自 `order/订单取消优化#子1` 和 `payment/支付渠道重构#alipay` 等不同域的子需求 | 单父需求内聚：里程碑 `{M}` 只能属于一个父需求 `docs/discuss/{service-name}/{父需求名}/.task/milestones/{M}/` |
-| **状态文件** | metadata.md（子需求级，8 字段精简）—— 子需求唯一状态源 | progress.md（需求级 + 里程碑级 + 任务级三层字段）—— 多层混用 |
-| **状态机** | 版本 5 态：`DRAFT → IN_PROGRESS → READY → RELEASED → ARCHIVED`（每态有显式转换命令 + 严格前置校验） | 无独立状态机：里程碑继承父需求状态，无独立推进命令 |
-| **活动指针** | 无活动指针：所有命令必须显式传子需求 ID 或版本号；缺参时直接报错 + 列出可选项 | `.workflow-active` 粘性文件：一次 `use {需求}` 后可省略参数 |
-| **既有数据兼容** | 硬切换无迁移：v1 progress.md / milestones/ 数据视为遗留，用户自行清理 | — |
-
-**核心约束**：版本是聚合视图，子需求是执行单元。5 阶段流程在每个子需求上独立推进，版本只是「跨域子需求 → 一次发布批次」的打包容器。子需求 ↔ 版本 一对一绑定，全局唯一不可重复打包。
+| 原则 | 含义 |
+|------|------|
+| **状态机单一数据源** | `progress.md` 是唯一状态源；每次状态变化即时回写（阻塞步骤） |
+| **四道人工门** | 设计审核（阶段3）、复杂任务 plan（阶段4）、CR 问题裁决（阶段4）、验收问题裁决（阶段5）——关键决策必须人确认 |
+| **设计分两层** | design-consensus = 共识/契约层（小需求够用）；复杂任务再出任务级 plan/LLD |
+| **编码与审查分离** | 编码、CR、改写各自独立 agent，不共享上下文，禁止自审 |
+| **编码并行由 Claude 判断** | 互不依赖、目录不重叠的任务可并行；CR 门永远逐任务 |
+| **设计错可回退** | rework 通道按根因层级（实现/设计/需求）回退 + 依赖级联重做 |
 
 ---
 
-## 五阶段主流程（在子需求级独立执行）
+## 五阶段 + 四人工门 主流程
 
 ```
-  阶段1 需求讨论     req create {父需求名} → req split {父需求名}    启动子需求
-     │ (产出 docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/discussion.md)
+  阶段1 需求讨论        /workflow start  → devops-discuss 多轮对话
+     │ (产出 docs/discuss/{需求ID}.md)
      ▼
-  阶段2 分析与设计   next {子需求ID}  → analyst 逐模块分析 + ralph 汇总设计
-     │ (产出 analysis/、design.md)
+  阶段2 分析与设计      /workflow next   → analyst 逐模块分析 + ralph 汇总设计
+     │ (产出 analysis/、design-consensus.md[必含清单]、dev-tasks.md)
      ▼
  ┌──────────────────────────────────────────┐
- │ 阶段3 设计审核门  ★人工★  PENDING_DESIGN_REVIEW │
- │   approve {子需求ID}                       │
+ │ 阶段3 设计审核门  ★人工★  PENDING_DESIGN_REVIEW │  ← 清单式审核，缺项打回阶段2
+ │   /workflow approve                        │
  └──────────────────────────────────────────┘
      ▼
-  阶段4 开发与逐任务审查  next {子需求ID}   （详见 references/stage-4-dev.md）
+  阶段4 开发与逐任务审查  /workflow next  （见下方"任务级闭环"）
      │
      ▼
-  阶段5 收尾验收        next {子需求ID}   → verifier 全量回归 + 一致性把关
-     │ (产出 acceptance.md)
+  阶段5 收尾验收        /workflow next   → verifier 全量回归 + 一致性把关（只读，不改代码）
+     │ (产出 acceptance/acceptance.md 问题清单)
+     ├─ 通过（无问题）→ COMPLETED
+     ▼ 有问题
+ ┌──────────────────────────────────────────┐
+ │ 阶段5 验收确认门 ★人工★ PENDING_ACCEPT_REVIEW │  ← 逐条裁决 ACCEPTED/REJECTED/MODIFIED
+ │   /workflow approve                        │
+ └──────────────────────────────────────────┘
      ▼
-  COMPLETED ──→ summary {版本号}  → 交付清单 change-manifest.md（DDL / Job·MQ / API，给 DBA 与前端）
+  ACCEPT_FIXING → executor 修复已采纳项 → 重跑收尾验收
+     ▼
+  COMPLETED ──→ /workflow summary  → 交付清单 change-manifest.md（DDL / Job·MQ / API，给 DBA 与前端）
 
-  ※ 阶段5 后如发现设计/需求层缺陷 → rework {子需求ID} 回退（要求版本状态 ∈ {DRAFT, IN_PROGRESS, READY}；RELEASED / ARCHIVED 报错）
+  ※ 阶段4/5 若发现设计/需求层缺陷 → /workflow rework 回退重做
 ```
-
-```
-阶段4 任务级闭环（每个任务独立走完，子需求级 metadata.md 为唯一状态源）
-
-  TODO
-   │ ⓪ 复杂度判断（Claude）
-   ├─ 简单 ─────────────────────────────────────────────┐
-   └─ 复杂 → 出 plan/LLD (architect/planner，只读)        │
-            ▼ PLANNING                                    │
-         ┌────────────────────────────────────────┐      │
-         │ plan 人工门 ★人工★ PENDING_PLAN_REVIEW      │      │
-         │   approve {子需求ID}                          │      │
-         └────────────────────────────────────────┘      │
-            ▼ PLAN_CONFIRMED                              │
-   ┌───────────────────────────────────────────────────┘
-   │ ① 编码 (executor，简单对照 design.md / 复杂对照已确认 plan)
-   ▼ CODING
-   │ ② DoD：phpunit 绿 + php -l 语法校验通过
-   │ ③ CR 扫描 (code-reviewer，只读，只产出编号问题清单，不改代码)
-   ▼ CR_SCANNED
-         ┌────────────────────────────────────────┐
-         │ CR 问题人工门 ★人工★ PENDING_CR_REVIEW      │  ← 逐条裁决 ACCEPTED/REJECTED/MODIFIED
-         │   approve {子需求ID}                          │      │
-         └────────────────────────────────────────┘
-   ▼ CR_CONFIRMED
-   │ ⑤ 改写 (executor，只改已采纳项)
-   ▼ REWRITING
-   │ ⑥ 复验 + 进度回写（强制）：phpunit 绿 + php -l 通过 → 回写 metadata.md 任务状态行 + 子需求目录 dev-tasks.md
-   ▼ VERIFYING → DONE
-```
-
-> **CR 黑盒治理**：code-reviewer 只产出问题清单，绝不自动改代码。问题必须经人逐条裁决后，才由另一个 executor 对「已采纳」项改写。
-> **进度回写是阻塞步骤**：每次状态流转都即时写回子需求 `metadata.md` 的 `currentStage` / `currentState` 字段；不回写不得推进下一个任务。
-> **并行约束**：两个无依赖、目录不重叠的子需求可同时进入 CODING；CR 门永远逐子需求串行。
 
 ---
 
-## 版本制度
-
-版本是「跨父需求、跨业务域的子需求聚合容器」，标识一次发布批次。
-
-- **状态机 5 态**：`DRAFT → IN_PROGRESS → READY → RELEASED → ARCHIVED`，每态转换由专门命令触发（`version start / ready / close / archive`）。
-- **状态文件**：`docs/version/{版本号}`（全局，无扩展名），含 9 字段；不缓存子需求状态（实时从各 metadata.md 聚合）。
-- **子需求绑定**：一对一绑定；`metadata.md.versionBinding` 为单值字符串；同一子需求不可重复打包到多个版本。
-- **ARCHIVED 永久封存**：状态机终点，无 unarchive 命令；任何修改类命令一律拒绝。
-
-### 版本创建流程（4 步）
+## 阶段4 任务级闭环（每个任务独立走完）
 
 ```
-1. 建空 DRAFT 文档  → version create {版本号}  写入 9 字段初始值
-2. 扫描未绑定子需求  → 自动扫描 metadata.md.versionBinding 为空的子需求
-3. 交互多选         → 用户用编号多选要纳入的子需求
-4. 回写 metadata    → 对每个选中子需求写 metadata.md.versionBinding = {版本号}
+TODO
+ │ ⓪ 复杂度判断（Claude）
+ ├─ 简单 ─────────────────────────────────────────────┐
+ └─ 复杂 → 出 plan/LLD (architect/planner，只读)         │
+          ▼ PLANNING                                    │
+       ┌────────────────────────────────────────┐      │
+       │ plan 人工门 ★人工★ PENDING_PLAN_REVIEW      │      │
+       │   /workflow approve                      │      │
+       └────────────────────────────────────────┘      │
+          ▼ PLAN_CONFIRMED                              │
+ ┌───────────────────────────────────────────────────┘
+ │ ① 编码 (executor，简单对照 design-consensus / 复杂对照已确认 plan)
+ ▼ CODING
+ │ ② DoD：phpunit 绿 + php -l 语法校验通过
+ │ ③ CR 扫描 (code-reviewer，只读，只产出编号问题清单，不改代码)
+ ▼ CR_SCANNED
+       ┌────────────────────────────────────────┐
+       │ CR 问题人工门 ★人工★ PENDING_CR_REVIEW      │  ← 逐条裁决 ACCEPTED/REJECTED/MODIFIED
+       │   /workflow approve                      │
+       └────────────────────────────────────────┘
+ ▼ CR_CONFIRMED
+ │ ⑤ 改写 (executor，只改已采纳项)
+ ▼ REWRITING
+ │ ⑥ 复验 + 进度回写（强制）：phpunit 绿 + php -l 通过 → 回写 progress.md + dev-tasks.md
+ ▼ VERIFYING → DONE
 ```
 
-### 版本状态推进
+> **CR 黑盒治理**：code-reviewer 只产出问题清单，绝不自动改代码。问题必须经人逐条裁决后，才由另一个 executor 对"已采纳"项改写。
+> **进度回写是阻塞步骤**：每次状态流转都即时写回 `progress.md` 任务状态行 + 里程碑进度表计数，并同步 `dev-tasks.md` 子项勾选；不回写不得推进下一个任务。
 
-```
-DRAFT ──version start──> IN_PROGRESS ──version ready──> READY ──version close──> RELEASED ──version archive──> ARCHIVED
-                                                                                                            ↑
-                                                                                                   永久封存（不可逆）
-```
+---
 
-每个状态转换都有严格前置条件（AC15），不满足立即报错，错误信息含「字段名 / 原因 / 修复建议」三段式。
+## 里程碑（默认单里程碑）
+
+- **默认**：一个需求 = 一个里程碑，整套 5 阶段直接在需求层跑，无需关心里程碑。
+- **大需求**：用 `/workflow split` 按交付切片拆成多个里程碑（如按渠道/子系统/上线批次拆分）。拆分后每个里程碑独立跑阶段 2→5，公共设计骨架（`design-foundation.md`）须先于各里程碑定稿；用 `#里程碑` 选择符分别推进。
+
+---
+
+## rework 返工通道
+
+开发+CR 完成后，人工审核发现设计/实现有根本性问题时用。按根因层级决定回退深度：
+
+| 根因层级 | 含义 | 回退动作 | 重跑范围 |
+|---------|------|---------|---------|
+| 实现级 | 设计对、代码错 | 不动 design-consensus | 受影响任务回 TODO → 重 code → 重 CR |
+| **设计级** | design-consensus 错 | 标返工修订 → 退回阶段2修订 → 阶段3重审 | 受影响任务 **+ 依赖该设计的下游任务**级联回 TODO（复杂任务重出 plan）|
+| 需求级 | 需求本身错 | 回阶段1 重新 devops-discuss | 视讨论结论，可能整体重来 |
+
+依赖扩散：自动从 dev-tasks 依赖图算出下游受影响任务，**列给人工确认**后才标重做；未受影响的 DONE 任务保留。
+
+> 边界：只改当前任务能解决 → 用 CR 改写；牵动设计或别的任务 → 用 rework。
 
 ---
 
 ## 命令速查
 
-> 所有命令**必须显式传参**（子需求 ID 或版本号）。缺参统一行为：报错 + 列出可选项（AC16）。
+| 命令 | 作用 |
+|------|------|
+| `/workflow use [需求ID][#里程碑]` | **设定活动上下文（粘性）**，之后裸命令默认作用于它 |
+| `/workflow start {需求名}` | 创建需求，进入阶段1讨论（自动设为活动）|
+| `/workflow next [需求ID][#里程碑]` | 推进到下一阶段 / 下一个任务（省略=活动上下文）|
+| `/workflow approve [需求ID][#里程碑]` | 确认当前人工门（设计审核 / plan / CR 裁决 / 验收问题裁决，按状态自动分发）|
+| `/workflow status [需求ID][#里程碑]` | 查看进度（省略=活动上下文+高亮；无活动则全部）|
+| `/workflow list` | 列出未完成的需求 |
+| `/workflow split [需求ID] {里程碑列表}` | 大需求拆里程碑 |
+| `/workflow followup {已完成需求ID} [新需求名]` | 基于已完成需求发起新需求（继承设计上下文） |
+| `/workflow rework [需求ID][#里程碑]` | 设计/实现缺陷返工 |
+| `/workflow summary [需求ID][#里程碑]` | 产出交付清单（DDL / Job·MQ / API）给 DBA 与前端，验收通过后执行 |
 
-### `req` 命令族（4 个）
-
-| 命令 | 必传参数 | 作用 | 替代的 v1 命令 |
-|------|---------|------|--------------|
-| `/php-workflow req create` | `{service-name}/{父需求名}` | 创建父需求目录骨架 | 替代 `start` |
-| `/php-workflow req show` | `{service-name}/{父需求名}` | 显示父需求详情 + 子需求清单 | — |
-| `/php-workflow req list` | （无） | 列出所有父需求 | — |
-| `/php-workflow req split` | `{service-name}/{父需求名}` | 交互式向导逐个创建子需求 | 替代 `split` |
-
-### `version` 命令族（8 个）
-
-| 命令 | 必传参数 | 作用 |
-|------|---------|------|
-| `/php-workflow version create` | `{版本号}` | 交互式建版本（4 步：DRAFT 文件 → 扫描 → 多选 → 回写 metadata） |
-| `/php-workflow version show` | `{版本号}` | 显示版本详情 + 子需求状态聚合 |
-| `/php-workflow version list` | （无） | 列出所有版本 |
-| `/php-workflow version add-sub` | `{版本号} {子需求ID}` | DRAFT 版本增量加子需求 |
-| `/php-workflow version start` | `{版本号}` | DRAFT → IN_PROGRESS（须 ≥1 子需求且 ≥1 子需求已推进） |
-| `/php-workflow version ready` | `{版本号}` | IN_PROGRESS → READY（须全部子需求 COMPLETED） |
-| `/php-workflow version close` | `{版本号}` | READY → RELEASED（发布，写 releasedAt） |
-| `/php-workflow version archive` | `{版本号}` | RELEASED → ARCHIVED（永久封存） |
-
-### 保留命令（5 个）
-
-| 命令 | 必传参数 | 作用 |
-|------|---------|------|
-| `/php-workflow next` | `{子需求ID}` | 推进子需求到下一阶段（缺参报错 + 列可选项） |
-| `/php-workflow approve` | `{子需求ID}` | 确认子需求当前人工门（设计审核 / plan / CR 裁决，按状态自动分发） |
-| `/php-workflow status` | `[子需求ID \| 版本号]` | 显示进度（缺参扫描 + 汇总） |
-| `/php-workflow rework` | `{子需求ID}` | 子需求从 COMPLETED 回退到 ANALYZING（强门禁：版本非 RELEASED/ARCHIVED） |
-| `/php-workflow summary` | `{版本号}` | 输出版本聚合 DDL / Job·MQ / API 清单 |
-
-**总命令数**：17 启用（4 req + 8 version + 5 保留）+ 3 删除（见下）。
-
-### ID 格式
-
-- **父需求 ID** = `{service-name}/{父需求名}`（如 `order/订单取消优化`）
-- **子需求 ID** = `{service-name}/{父需求名}#{子需求名}`（如 `payment/支付渠道重构#alipay`）
-- 按**最后一个 `#`** 拆分：`#` 之前 = 父路径，之后 = 子名
-
-### 已删除命令（3 个）的迁移指南
-
-v1 旧命令已硬切换删除；执行会立即报错并给出迁移指南。
-
-| v1 命令 | 状态 | 迁移到 |
-|--------|------|--------|
-| `/php-workflow use {需求ID}[#里程碑]` | ❌ 已删除 | **直接传子需求 ID** 给 `next / approve / status / rework`。v2 无活动指针，每次命令必须显式传参 |
-| `/php-workflow split {需求ID} {里程碑列表}` | ❌ 已删除 | **`/php-workflow req split {父需求ID}`** —— 启动交互式向导逐个创建子需求。旧版里程碑嵌套目录已废弃，子需求同级扁平化 |
-| `/php-workflow start {需求名}` | ❌ 已删除 | **`/php-workflow req create {service-name}/{父需求名}`** —— 创建父需求后，用 `req split` 进入子需求创建向导 |
+- **需求 ID** = `{YYYY-MM-DD}-{域}-{需求名}`（如 `2026-09-12-order-订单取消优化`），与 `docs/discuss/` 目录一致
+- **`#里程碑`** 仅多里程碑需求需要（如 `2026-09-12-payment-支付渠道重构#alipay`）
+- **活动上下文（推荐）**：`/workflow use` 选一次当前在搞的需求/里程碑（存于 `docs/discuss/.workflow-active`），之后 `next/approve/status/rework` 省略参数即默认指向它，不必每步重复敲长 ID
+- 模糊匹配：`use` / 显式传参支持前缀子串（如 `trade#共` → `trade…#共享基础`），唯一即定位
+- 省略且无活动上下文时：唯一进行中的自动选中，多个则列出让你选；显式传 ID 可临时操作别的需求而不改活动指针
 
 ---
 
 ## 使用示例
 
-### 示例一：单子需求（最常见）
-
-订单取消优化 —— 单父需求、单子需求、无版本管理诉求（也走版本，但只含一个子需求）。
+### 示例一：普通需求（单里程碑，最常见）
 
 ```bash
-# 1. 创建父需求（domain=order）
-/php-workflow req create order/订单取消优化
-#   → 创建 docs/discuss/order/订单取消优化/.task/parent.md
-#   → 提示：下一步用 req split 创建子需求
+# 1. 起需求，进入讨论（devops-discuss 多轮对话厘清目标/影响）
+/workflow start 订单取消优化
+#   → 询问业务域=order，多轮讨论，产出 docs/discuss/2026-09-12-order-订单取消优化/discussion.md
 
-# 2. 交互式向导创建子需求（输入子需求名 / 描述 / 模块影响，逐个创建）
-/php-workflow req split order/订单取消优化
-#   → 向导询问：子需求名 > 描述 > 模块影响
-#   → 创建 docs/discuss/order/订单取消优化/.task/订单取消逻辑/metadata.md（8 字段）
-#   → 提示：下一步用 version create 绑定版本
+# 2. 分析与设计（analyst 逐模块分析 + ralph 汇总出 design-consensus + dev-tasks）
+/workflow next
+#   → 状态停在 PENDING_DESIGN_REVIEW，给出设计审核清单自查结论
 
-# 3. 创建版本并选入子需求（4 步流程）
-/php-workflow version create v1.0
-#   → 步骤1：建空 DRAFT 文档 docs/version/v1.0（9 字段，status=DRAFT）
-#   → 步骤2：扫描未绑定子需求 → 列出 order/订单取消优化#订单取消逻辑（DISCUSSING）
-#   → 步骤3：交互多选（输入编号）→ 选中 1 个子需求
-#   → 步骤4：回写子需求 metadata.md.versionBinding = "v1.0"
+# 3. 设计审核门（你逐项核对 design-consensus 必含清单）
+/workflow approve
+#   → design-consensus 标 APPROVED，进入开发
 
-# 4. 启动版本
-/php-workflow version start v1.0
-#   → 校验：DRAFT + ≥1 子需求 + ≥1 子需求已推进
-#   → 状态：v1.0: DRAFT → IN_PROGRESS
+# 4. 开发：逐任务闭环（简单任务直接编码→CR 扫描→停在 CR 门）
+/workflow next
+#   → 任务1 编码完成、CR 扫出 3 个问题，停在 PENDING_CR_REVIEW，呈现问题清单
 
-# 5. 阶段 2：分析与设计（显式传子需求 ID）
-/php-workflow next order/订单取消优化#订单取消逻辑
-#   → 调度 analyst + ralph 产出 analysis/、design.md
-#   → 状态：metadata.md.currentState: DISCUSSING → ANALYZING → PENDING_DESIGN_REVIEW
+#    你裁决：#1 ACCEPTED、#2 REJECTED(理由)、#3 MODIFIED(说明)
+/workflow approve
+#   → 只改 #1/#3，复验绿，任务1 置 DONE，回写 progress.md + dev-tasks.md
 
-# 6. 阶段 3：设计审核（人工门）
-/php-workflow approve order/订单取消优化#订单取消逻辑
-#   → 逐项核对 design.md 必含清单
-#   → 状态：metadata.md.currentState: PENDING_DESIGN_REVIEW → DEVELOPING
+/workflow next       # 推进任务2…… 直到全部 DONE
 
-# 7. 阶段 4：开发与逐任务审查（多次 next 推进任务）
-/php-workflow next order/订单取消优化#订单取消逻辑
-#   → 任务 1 编码完成、CR 扫出问题，停在 PENDING_CR_REVIEW
-#   → 人工裁决：#1 ACCEPTED、#2 REJECTED、#3 MODIFIED
-/php-workflow approve order/订单取消优化#订单取消逻辑
-#   → 改写 #1/#3，复验绿，任务 1 置 DONE
-/php-workflow next order/订单取消优化#订单取消逻辑   # 推进任务 2 … 直到全部 DONE
-
-# 8. 阶段 5：收尾验收
-/php-workflow next order/订单取消优化#订单取消逻辑
-#   → verifier 全量 phpunit + php -l + 跨模块一致性
-#   → 状态：metadata.md.currentState: REVIEWING → COMPLETED
+# 5. 收尾验收（verifier 全量 phpunit + php -l + 跨模块一致性；phpstan 默认不卡）
+/workflow next
+#   → 通过则 COMPLETED
+#   → 有问题则停在 PENDING_ACCEPT_REVIEW，呈现问题清单
+#    你裁决：#1 ACCEPTED、#2 REJECTED(理由)
+/workflow approve
+#   → 只修已采纳项，修复后重跑验收
 ```
 
-**示例一产物路径**：
-```
-docs/discuss/order/订单取消优化/
-├── .task/
-│   ├── parent.md
-│   └── 订单取消逻辑/
-│       ├── metadata.md              # 8 字段；currentState=COMPLETED; versionBinding=v1.0
-│       ├── discussion.md            # 阶段 1 讨论文档
-│       ├── analysis/                # 阶段 2 分析产物
-│       ├── design.md                # 阶段 2 设计文档
-│       ├── design-consensus.md      # 阶段 3 审核记录
-│       ├── dev-tasks.md             # 阶段 4 任务清单
-│       ├── plans/                   # 阶段 4 复杂任务 LLD
-│       ├── review/                  # 阶段 4 CR 记录
-│       ├── done/                    # 阶段 4 已完成任务归档
-│       ├── acceptance.md            # 阶段 5 验收报告
-│       └── change-manifest.md       # 阶段 5 交付清单
-docs/version/v1.0                     # 9 字段；status=IN_PROGRESS；subRequirements=[order/订单取消优化#订单取消逻辑]
-```
-
----
-
-### 示例二：多子需求跨域版本
-
-支付平台 v1.0 发布 —— 同时纳入 `order/订单取消优化#订单取消逻辑` 和 `payment/支付渠道重构#alipay`，跨域聚合到同一版本。
+### 示例二：大需求（多里程碑 + 复杂任务 plan 门）
 
 ```bash
-# 1. 先建两个父需求
-/php-workflow req create order/订单取消优化
-/php-workflow req create payment/支付渠道重构
-#   → 各创建 docs/discuss/{order,payment}/{需求名}/.task/parent.md
+# 需求已讨论完，按交付切片拆里程碑
+/workflow split payment/支付渠道重构 alipay,wechat
+#   → 确认 alipay/wechat 划分 + 抽出 design-foundation.md（公共骨架，先定稿）
 
-# 2. 在各自父需求下用 req split 创建子需求
-/php-workflow req split order/订单取消优化
-#   → 向导创建子需求 订单取消逻辑
-/php-workflow req split payment/支付渠道重构
-#   → 向导创建子需求 alipay
-#   → 向导创建子需求 wechat（同一版本可选；本例只选 alipay 演示）
+# 选一次活动上下文，之后裸命令默认作用于它（不必每步敲长 ID）
+/workflow use payment/支付渠道重构#alipay     # 也可模糊：use payment#alipay
 
-# 3. 创建版本同时纳入两域子需求（关键演示：跨父 / 跨域）
-/php-workflow version create v1.0
-#   → 步骤1：建空 DRAFT 文档 docs/version/v1.0
-#   → 步骤2：扫描未绑定子需求（跨父需求聚合）:
-#       [1] order/订单取消优化#订单取消逻辑   (DISCUSSING)
-#       [2] payment/支付渠道重构#alipay       (DISCUSSING)
-#       [3] payment/支付渠道重构#wechat       (DISCUSSING)
-#   → 步骤3：交互多选（输入编号）> 1,2
-#   → 步骤4：同时回写两个子需求 metadata.md.versionBinding = "v1.0"
-#   → 校验：子需求归属唯一 → 通过；不重复打包
+/workflow next        # 阶段2 分析设计 → PENDING_DESIGN_REVIEW
+/workflow approve     # 设计审核通过
 
-# 4. 启动版本
-/php-workflow version start v1.0
-#   → 校验：DRAFT + ≥1 子需求
-#   → 状态：v1.0: DRAFT → IN_PROGRESS
+/workflow next        # 阶段4：某任务判为【复杂】→ architect 出 plan，停在 PENDING_PLAN_REVIEW
+/workflow approve     # plan 确认 → 编码 → CR 扫描 → PENDING_CR_REVIEW …
 
-# 5. 两子需求并行推进阶段 2-5（互不依赖、目录不重叠时由 Claude 判断可并行）
-#    子需求 A：order 域
-/php-workflow next order/订单取消优化#订单取消逻辑
-#   → 阶段 2 设计 → PENDING_DESIGN_REVIEW
-/php-workflow approve order/订单取消优化#订单取消逻辑
-#   → 阶段 3 通过 → DEVELOPING
-#    ... 阶段 4、5 同示例一
+# 切到另一个里程碑：只敲 #
+/workflow use #wechat
+/workflow next
 
-#    子需求 B：payment 域（可与 A 并行编码）
-/php-workflow next payment/支付渠道重构#alipay
-#   → 阶段 2 设计 → PENDING_DESIGN_REVIEW
-/php-workflow approve payment/支付渠道重构#alipay
-#   → 阶段 3 通过 → DEVELOPING
-#    ... 阶段 4、5 同示例一
-
-# 6. 全员子需求 COMPLETED 后 → 版本推进
-/php-workflow version ready v1.0
-#   → 校验：IN_PROGRESS + 所有子需求 currentState=COMPLETED
-#   → 状态：v1.0: IN_PROGRESS → READY
-
-/php-workflow version close v1.0
-#   → 二次确认：即将发布版本 v1.0
-#   → 写 releasedAt
-#   → 状态：v1.0: READY → RELEASED
-
-# 7. 后续归档（不可逆，强警告）
-/php-workflow version archive v1.0
-#   → 二次确认：归档后永久只读
-#   → 写 archivedAt
-#   → 状态：v1.0: RELEASED → ARCHIVED（永久封存）
-
-# 8. 跨域聚合交付清单（按版本聚合）
-/php-workflow summary v1.0
-#   → 输出两个子需求所有 DDL / Job·MQ / API
+# 看进度（省略=活动上下文高亮；status 全局进度表）
+/workflow status
+#   ▶ 活动: payment/支付渠道重构#wechat
+#   里程碑 alipay     阶段 4/5 — 开发（进行中）  任务 2/6
+#   里程碑 wechat ◀   阶段 3/5 — 设计审核（待审核）任务 0/9
 ```
 
-**示例二产物路径**：
-```
-docs/discuss/order/订单取消优化/.task/订单取消逻辑/metadata.md     # versionBinding: v1.0
-docs/discuss/payment/支付渠道重构/.task/alipay/metadata.md         # versionBinding: v1.0
-docs/discuss/payment/支付渠道重构/.task/wechat/metadata.md         # versionBinding: （空，未纳入 v1.0）
-docs/version/v1.0                                                  # 9 字段；subRequirements=[order/...#订单取消逻辑, payment/...#alipay]
-```
-
----
-
-### 示例三：rework 返工流程
-
-阶段 5 验收时发现 design.md 方案有缺陷，需回退该子需求重新设计。
+### 示例三：需求完成后追加功能 → followup
 
 ```bash
-# 前提：子需求 A 处于 COMPLETED，版本 v1.0 处于 IN_PROGRESS
-# 验收 review 发现 design.md 数据模型有缺陷，需重新设计
-
-# 1. 触发 rework（强门禁：版本必须 ∈ {DRAFT, IN_PROGRESS, READY}）
-/php-workflow rework order/订单取消优化#订单取消逻辑
-#   → 校验：currentState=COMPLETED + 版本 v1.0 状态=IN_PROGRESS（通过门禁）
-#   → 执行 rework（详见 references/rework.md）:
-#     * 创建返工单 docs/discuss/order/订单取消优化/.task/订单取消逻辑/rework/R1-数据模型缺陷.md
-#     * 状态：metadata.md.currentState: COMPLETED → ANALYZING
-#     * 状态：metadata.md.currentStage: 5 → 2
-
-# 2. 阶段 2 修订 design.md
-/php-workflow next order/订单取消优化#订单取消逻辑
-#   → 修订 design.md（数据模型调整）
-#   → 状态：ANALYZING → PENDING_DESIGN_REVIEW
-
-# 3. 阶段 3 重审（人工门）
-/php-workflow approve order/订单取消优化#订单取消逻辑
-#   → 逐项核对修订后的 design.md
-#   → 状态：PENDING_DESIGN_REVIEW → DEVELOPING
-
-# 4. 阶段 4 重做受影响任务
-/php-workflow next order/订单取消优化#订单取消逻辑
-#   → 复杂任务重出 plan → PLAN_CONFIRMED → 编码 → CR
-#   → 状态：DEVELOPING
-/php-workflow approve order/订单取消优化#订单取消逻辑   # CR 门裁决
-/php-workflow next order/订单取消优化#订单取消逻辑   # 推进到下一个任务
-# ... 直至所有 DONE
-
-# 5. 阶段 5 重验
-/php-workflow next order/订单取消优化#订单取消逻辑
-#   → 全量回归通过 → COMPLETED
-
-# 6. 重新推版本（v1.0 状态不变：仍是 IN_PROGRESS，其他子需求不受影响）
-/php-workflow version ready v1.0
-#   → 校验：所有子需求 COMPLETED
-#   → 状态：v1.0: IN_PROGRESS → READY
-
-# 7. 后续 close / archive 同示例二
+# 订单取消优化已 COMPLETED，现在要基于它做"取消原因统计"
+/workflow followup order/订单取消优化 取消原因统计
+#   → 自动继承父需求设计文档到 docs/parent/
+#   → 进入阶段 1 讨论，聚焦增量变更
+#   → 讨论完成后 /workflow next 走标准 5 阶段流程
 ```
 
-**版本门禁边界示例**（强门禁的拦截）：
+### 示例四：收尾验收发现设计错 → rework
+
 ```bash
-# 如果 v1.0 已 RELEASED，rework 会立即报错
-/php-workflow rework order/订单取消优化#订单取消逻辑
-#   → [字段 versionStatus RELEASED] 版本已发布，禁止 rework。建议：如需修复请新建子需求并 /php-workflow version add-sub 加入新版本
+# 阶段5 验收时发现 design-consensus 的方案有缺陷，多个已 DONE 任务受影响
+/workflow rework payment/支付渠道重构#alipay
+#   → 确认根因层级 = 设计级
+#   → design-consensus 标 "## 返工修订 R1"，里程碑退回阶段2
+#   → 自动算出依赖该设计的下游任务，列给你确认（可增删）
+#   → 确认后这些任务回 TODO(标 返工R1)，未受影响的 DONE 保留
+#   → progress.md 追加返工记录 R1
 
-# 如果 v1.0 已 ARCHIVED，rework 同样报错
-/php-workflow rework order/订单取消优化#订单取消逻辑
-#   → [字段 versionStatus] 版本已永久封存，禁止 rework
-
-# RELEASED / ARCHIVED 版本的任何修改类命令一律拒绝
-#   如需修复：建新子需求 + 新版本（v1.1）→ version add-sub → 走完整流程
-```
-
-**示例三产物路径**：
-```
-docs/discuss/order/订单取消优化/.task/订单取消逻辑/
-├── metadata.md                       # 8 字段；currentState=COMPLETED；versionBinding=v1.0；阶段产物引用追加 rework/R1-...
-├── rework/
-│   └── R1-数据模型缺陷.md             # 返工单
-├── analysis/                          # 修订后的分析
-├── design.md                          # 修订后的设计
-├── design-consensus.md                # 阶段 3 重审记录
-└── ...                                # 阶段 4-5 产物全部更新
-docs/version/v1.0                      # 9 字段；状态保持 IN_PROGRESS → READY → RELEASED
+# 修订设计 → 重审 → 受影响任务级联重跑
+/workflow next payment/支付渠道重构#alipay     # 阶段2 修订 design-consensus
+/workflow approve payment/支付渠道重构#alipay  # 阶段3 重审通过
+/workflow next payment/支付渠道重构#alipay     # 复杂任务重出 plan → 重 code → 重 CR
 ```
 
 ---
@@ -409,44 +230,33 @@ docs/version/v1.0                      # 9 字段；状态保持 IN_PROGRESS →
 ## 产出物目录
 
 ```
-docs/
-├── discuss/                              # 子需求树（按域/父需求/子需求组织，扁平化）
-│   └── {service-name}/{父需求名}/
-│       └── .task/
-│           ├── parent.md                 # 父需求摘要（req create 创建）
-│           └── {子需求名}/
-│               ├── metadata.md           # ★唯一状态源（8 字段：subReqId / parentReqId / versionBinding / currentStage / currentState / createdAt / updatedAt / 阶段产物引用）
-│               ├── discussion.md         # 阶段 1 讨论文档
-│               ├── analysis/             # 阶段 2 分析产物
-│               ├── design.md             # 阶段 2 设计文档
-│               ├── design-consensus.md   # 阶段 3 审核记录
-│               ├── dev-tasks.md          # 阶段 4 任务清单
-│               ├── plans/                # 阶段 4 复杂任务 LLD
-│               ├── done/                 # 阶段 4 已完成任务归档
-│               ├── review/               # 阶段 4 CR 记录
-│               ├── acceptance.md         # 阶段 5 验收报告
-│               ├── change-manifest.md    # 阶段 5 交付清单
-│               └── rework/               # 返工单（R{n}-{原因}.md）
-└── version/                              # 版本聚合（全局，跨父需求/跨域）
-    ├── v1.0                              # 无扩展名；9 字段；不缓存子需求状态
-    ├── v1.1
-    └── v2.0
+docs/discuss/
+  .workflow-active               # 活动上下文指针（单行 {需求ID}[#里程碑]，便捷用，非状态源）
+  {需求ID}/
+  discussion.md                  # 阶段1 讨论文档
+  docs/                          # 需求级参考文档（业务说明、接口文档、原始材料，用户手动放入）
+  .task/
+    progress.md                  # ★唯一状态源：阶段记录 + 任务清单/里程碑进度表 + 返工记录
+    analysis/                    # 阶段2 逐模块分析
+    design-consensus.md          # 阶段2 共识/契约层设计（必含清单）
+    dev-tasks.md                 # 阶段2 任务拆分（标注 简单|复杂 + 依赖）
+    plans/                       # 阶段4 复杂任务的 plan/LLD（简单任务无）
+    done/                        # 阶段4 各任务完成标记（改动摘要、契约、测试结果）
+    review/                      # 阶段4 各任务 CR 问题清单 + 人工裁决
+    rework/                      # 返工单（缺陷返工时才有）
+    acceptance/                  # 阶段5 验收报告目录
+      acceptance.md              # 收尾验收报告
+    change-manifest.md           # /workflow summary 交付清单（DDL/Job·MQ/API，给 DBA 与前端）
+  # 多里程碑时，analysis/design-consensus/dev-tasks/plans/done/review/rework 下沉到
+  # .task/milestones/{里程碑}/，design-foundation.md 留在 .task/ 根作公共骨架
 ```
-
-**v1 → v2 目录变更**：
-- ❌ 删除 `docs/discuss/.workflow-active`（活动指针）
-- ❌ 删除 `docs/discuss/{service-name}/{需求名}/.task/progress.md`（替换为各子需求 `metadata.md`）
-- ❌ 删除 `docs/discuss/{service-name}/{需求名}/.task/milestones/{M}/` 嵌套（子需求同级扁平化）
-- ✅ 新增 `docs/version/{版本号}` 全局版本文件
 
 ---
 
 ## 依赖与约定
 
-- **依赖 skill/agent**：`req-discuss`（阶段1）、`php-analyzer`（架构文档）、`analyst`/`architect`/`planner`/`executor`/`code-reviewer`/`verifier`（OMC agents）、`team`（并行编码）、`ralph`（汇总设计）
-- **测试/校验**：验收基线 = `vendor/bin/phpunit modules/{service-name}/tests` 单测绿 + 改动文件 `php -l` 语法校验。phpstan 默认不纳入验收（存量项目历史告警多、收益低），项目有干净基线时再可选开启。具体命令按项目配置
-- **单仓库单分支**：所有模块共用一条 feature 分支，diff 用 `git diff <默认分支>...HEAD -- modules/{service-name}` 按目录隔离；**无独立分支/PR**
+- **依赖 skill/agent**：`/devops-discuss`（阶段1）、`arch-analyzer`（架构文档）、`analyst`/`architect`/`planner`/`executor`/`code-reviewer`/`verifier`（OMC agents）、`team`（并行编码）、`ralph`（汇总设计）
+- **测试/校验**：验收基线 = `vendor/bin/phpunit modules/{模块}/tests` 单测绿 + 改动文件 `php -l` 语法校验。phpstan 默认不纳入验收（存量项目历史告警多、收益低），项目有干净基线时再可选开启。具体命令按项目配置
+- **单仓库单分支**：所有模块共用一条 feature 分支，diff 用 `git diff <默认分支>...HEAD -- modules/{模块}` 按目录隔离；**无独立分支/PR**
 - **架构规则**：遵守项目 `CLAUDE.md` 与 `.claude/rules/` 的架构与编码规范
-- **产出物只落项目内** `docs/discuss/{service-name}/{需求名}/.task/` 与 `docs/version/`，禁止写入 home 或仓库外
-- **并发协作**：metadata.md 与 version 文件编辑**不依赖自动加锁**，协作时人工协调（spec 不承诺并发安全）
-- **错误处理哲学**：严格失败 —— 任何校验失败立即停止；错误信息三段式 `[字段 {X}] {原因}。建议：{修复}`
+- **产出物只落项目内** `docs/discuss/{需求ID}/.task/`，禁止写入 home 或仓库外

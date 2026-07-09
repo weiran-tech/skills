@@ -1,848 +1,173 @@
 # 命令处理逻辑
 
-> **v2 重构说明**：本文件覆盖 php-workflow v2 的全部命令处理逻辑。v1 里程碑模式的所有命令已被硬切换废弃（无迁移、无双轨、无适配层）。
+> 执行任意 `/workflow` 子命令前读本文件。`rework` 的详细流程见 rework.md；各阶段执行细节见 stage-*.md。
+
+> **统一解析规则**：`next` / `approve` / `status` / `rework` 在确定作用目标（需求/里程碑）时，省略参数一律按「活动上下文」优先级解析——**显式参数 > 活动指针 (`docs/discuss/.workflow-active`) > 旧回退规则**（唯一进行中的自动选中；多个列出让选；无则提示 start）。显式传参不改变活动指针；要持久切换用 `use`。所有解析支持前缀/子串模糊匹配，唯一即定位，多个则列出让选。
 >
-> **统一解析规则**：
-> 1. 所有命令必须显式传子需求 ID 或版本号，**不再支持活动指针省略**。
-> 2. `next` / `approve` / `status` 缺参时：报错 + 扫描 `docs/discuss/` 与 `docs/version/` 列出可选项（AC16）。
-> 3. 错误信息统一格式：`[字段 {X}] {原因}。建议：{修复}`（AC18）。
->
-> **ID 解析函数**（所有命令复用）：
-> ```bash
-> # 解析子需求 ID {service-name}/{父需求名}#{子需求名} → 子需求目录
-> parse_sub_req_id() {
->   local id="$1"
->   # 按最后一个 # 拆分（ID 中如含 #，取最后一个为子需求分隔）
->   local last_hash="${id##*#}"
->   local prefix="${id%#*}"
->   local domain="${prefix%%/*}"
->   local parent="${prefix#*/}"
->   echo "docs/discuss/${domain}/${parent}/.task/${last_hash}"
-> }
->
-> # 解析父需求 ID {service-name}/{父需求名} → 父需求目录
-> parse_parent_req_id() {
->   local id="$1"
->   local domain="${id%%/*}"
->   local parent="${id#*/}"
->   echo "docs/discuss/${domain}/${parent}"
-> }
->
-> # 解析版本号 → 版本文件路径
-> parse_version_id() {
->   local v="$1"
->   echo "docs/version/${v}"
-> }
-> ```
->
-> **状态枚举**：
-> - 子需求（写 metadata.md）：`DISCUSSING | ANALYZING | PENDING_DESIGN_REVIEW | DEVELOPING | PENDING_PLAN_REVIEW | PENDING_CR_REVIEW | REVIEWING | COMPLETED`
-> - 版本（写 `docs/version/{版本号}`）：`DRAFT → IN_PROGRESS → READY → RELEASED → ARCHIVED`
->
-> **通用前置规则**（所有修改类命令）：任何修改 `docs/version/{版本号}` 的命令执行前必须先检查 `status == ARCHIVED`，若为 ARCHIVED 立即报错（D23/AC20）。
+> **里程碑「粘住」（关键，避免每步重复敲 `#`）**：活动指针应尽量带里程碑（`{需求ID}#里程碑`）。若指针**只有需求而该需求是多里程碑**：
+> 1. `next`/`approve` 解析里程碑时——唯一进行中的里程碑 → 自动选中；多个 → 列出让选。
+> 2. **解析出里程碑后，立即把它写回 `.workflow-active`（补成 `{需求ID}#里程碑`）使其粘住**，之后裸命令直接作用于该里程碑，**不再重复询问/输入 `#`**。
+> 3. 切换到别的里程碑用 `/workflow use #{里程碑}`（只敲 `#`）；该里程碑 COMPLETED 后，指针自动改指剩余唯一在跑的里程碑（或提示重新 `use`）。
+> 这样里程碑最多只需指定一次（甚至自动粘住），不是每个 `next` 都要带 `#`。`status` 解析不写回指针（它默认汇总展示）。
 
----
+## `/workflow use [需求ID][#里程碑]`
+设定活动上下文（粘性），之后裸命令默认作用于它。
+1. 解析入参（支持前缀/子串模糊匹配）：
+   - 传了 `需求ID[#里程碑]` → 解析为完整 ID；多里程碑需求建议带 `#里程碑`
+   - 只传 `#里程碑`（无需求名）→ 沿用当前活动指针的需求，仅切换里程碑
+   - 不传任何参数 → 显示当前活动上下文（不修改）
+2. 校验解析结果存在（需求目录/里程碑存在）；匹配到多个则列出让用户选
+3. 把完整 `{需求ID}[#里程碑]` 写入 `docs/discuss/.workflow-active`（覆盖）
+4. 回显：`当前活动: {需求ID}[#里程碑] — 阶段 {n}/5 {状态}`，并提示可直接 `/workflow next` / `approve` / `status`
 
-## §A. `req` 命令族（4 个）
+> 切到别的需求/里程碑就再 `use` 一次；活动指针指向的目标 COMPLETED 后，由 `next`/`status` 提示重新 `use`（若只剩唯一进行中的，自动改指它）。
 
-### `/php-workflow req create {service-name}/{父需求名}`
-
-**用途**：创建父需求目录结构，作为后续子需求的容器。替代 v1 的 `start` 命令。
-
-**处理步骤**：
-1. **解析参数**：
-   - 必传：域 + 父需求名（如 `payment/支付渠道重构`）
-   - 缺参 → 报错：`[字段 reqId] 缺失。必须传 {service-name}/{父需求名} 格式。建议：/php-workflow req create payment/支付渠道重构`
-2. **校验域合法性**：域必须在 `composer.json` 的 `autoload.psr-4` 或 `modules/` 目录中存在，否则报错
-3. **校验父需求不存在**：
-   - 检查 `docs/discuss/{service-name}/{父需求名}/` 是否已存在，存在则报错（AC3 + Appendix A）：
-     `[字段 parentReqId {service-name}/{父需求名}] 父需求已存在。建议：用 /php-workflow req show {service-name}/{父需求名} 查看，或选其他名称`
-4. **创建目录骨架**：
-   ```bash
-   mkdir -p "docs/discuss/{service-name}/{父需求名}/.task"
+## `/workflow start {需求名}`
+1. 询问用户需求所属的**业务域/模块**（从 `composer.json` 的 `autoload.psr-4` 或 `modules/` 目录读取本项目实际模块），或从需求描述中推断
+2. 检查 `docs/discuss/{需求ID}.md` 是否已存在，存在则提示用户是否要基于已有讨论继续
+3. **初始化需求目录**：创建 `docs/discuss/{需求ID}/docs/` 目录，提示用户放入参考文档：
    ```
-5. **初始化父需求摘要文件** `docs/discuss/{service-name}/{父需求名}/.task/parent.md`（元数据壳，含创建时间戳与域/名）
-6. **回显**：提示用户下一步用 `/php-workflow req split {父需求ID}` 进入交互式向导创建子需求
+   需求目录已创建: docs/discuss/{需求ID}/
+   参考文档目录: docs/discuss/{需求ID}/docs/
 
-**缺参行为**：缺参立即报错，不创建任何文件。
-
-**错误信息格式**：
-- `[字段 reqId] 缺失。必须传 {service-name}/{父需求名} 格式。建议：/php-workflow req create payment/支付渠道重构`
-- `[字段 parentReqId {service-name}/{父需求名}] 父需求已存在。建议：用 /php-workflow req show {service-name}/{父需求名} 查看`
-- `[字段 domain {service-name}] 域不在 composer.json 的 psr-4 配置中。建议：从 modules/ 目录选择合法域`
-
-**边界情况**：
-- 父需求名含特殊字符（空格、`/`）：建议用 `-` 或 `_` 替代；不阻止但提示
-- 父需求名重复：即时检查，重名直接报错
-- 子需求未创建时：父需求目录为空（仅含 `.task/parent.md`），不算异常
-
----
-
-### `/php-workflow req show {service-name}/{父需求名}`
-
-**用途**：显示父需求详情及其下子需求列表（含状态 + 版本绑定）。
-
-**处理步骤**：
-1. **解析参数**：
-   - 必传：父需求 ID
-   - 缺参 → 报错：`[字段 parentReqId] 缺失。建议：/php-workflow req show payment/支付渠道重构`
-2. **校验父需求存在**：`docs/discuss/{service-name}/{父需求名}/.task/parent.md` 必须存在；不存在则报错 `[字段 parentReqId {X}] 父需求不存在。建议：用 /php-workflow req list 查看全部父需求`
-3. **扫描子需求**：列出 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/metadata.md` 全部文件
-4. **解析每个 metadata.md**：读取 `subReqId / currentStage / currentState / versionBinding` 4 个字段
-5. **输出格式**：
+   请将本需求的参考文档放入 docs/ 目录（业务说明、接口文档、原始需求材料等）。
+   放好后回复确认，或回复"无参考文档"直接进入讨论。
    ```
-   父需求详情  payment/支付渠道重构
+4. 用户确认后，调用 `/devops-discuss` skill，传入需求名作为讨论主题。**如 `docs/` 下有文件，在 devops-discuss prompt 中附加**：`参考文档见 docs/discuss/{需求ID}/docs/，讨论前先读取`
+5. 讨论完成并保存后，创建 `.task/progress.md`（模板见 templates.md），状态设为 `ANALYZING`
+6. **把该需求设为活动上下文**（写入 `docs/discuss/.workflow-active`）
+7. 提示用户可用 `/workflow next` 进入分析与设计阶段（无需再带 ID）
 
-     创建时间: 2026-07-06 10:30
-     子需求数: 3
+**执行**：`/devops-discuss "{需求名}：{用户提供的需求描述}"`
 
-     子需求清单:
-       payment/支付渠道重构#alipay   阶段 4/5 (DEVELOPING)   绑定: v1.0
-       payment/支付渠道重构#wechat   阶段 2/5 (ANALYZING)    绑定: v1.0
-       payment/支付渠道重构#refund   阶段 1/5 (DISCUSSING)   绑定: -
-   ```
+## `/workflow split [需求ID] {里程碑列表}`
+把一个**已存在**的需求从单里程碑拆成多里程碑（仅大需求需要；普通需求不要拆）。
+1. 解析需求 ID（省略时自动选中）。要求该需求阶段 1 讨论已完成（讨论文档存在）
+2. 与用户确认里程碑划分：每个里程碑的名称、覆盖的模块、里程碑间依赖。例如 `alipay`（payment 中支付宝相关入口）、`wechat`（payment 中微信相关入口）
+3. 识别**跨里程碑公共设计骨架**（如路由机制、数据一致性、共享事件级联）；若存在，建议抽出为 `design-foundation.md`，并作为各里程碑的前置依赖
+4. 创建目录 `.task/milestones/{里程碑名}/`（各含 analysis/ done/ review/ 空目录占位）
+5. 若需求已有单里程碑产出（analysis/ 等），按里程碑归位到对应 `milestones/{里程碑名}/`，公共部分留在 `.task/` 根
+6. 重写 progress.md 为**多里程碑**结构（见 templates.md）
+7. **把活动上下文设为应先做的里程碑**（有公共基础则指向它，写入 `docs/discuss/.workflow-active`）
+8. 提示用户后续用 `/workflow use #{里程碑}` 切换、`/workflow next` 推进（有依赖的里程碑须等前置就绪）
 
-**缺参行为**：缺参立即报错。
+> 拆分是不可省的显式操作：未执行 split 的需求一律按单里程碑处理。已拆分的需求不支持自动合并回单里程碑（如需回退，手工整理目录后改 progress.md）。
 
-**错误信息格式**：
-- `[字段 parentReqId] 缺失。建议：/php-workflow req show payment/支付渠道重构`
-- `[字段 parentReqId {X}] 父需求不存在。建议：用 /php-workflow req list 查看`
+## `/workflow approve [需求ID][#里程碑]`
+确认当前所处的**人工检查点**。skill 有三个人工门，approve 按当前状态分发：
 
-**边界情况**：
-- 父需求下无任何子需求：显示"子需求数: 0" + 提示"用 /php-workflow req split 创建子需求"
-- 子需求 metadata.md 损坏（缺关键字段）：显示"⚠️ metadata.md 字段缺失"，但不影响其他子需求展示
+**A. 阶段 3 设计审核（PENDING_DESIGN_REVIEW）** — 详见 stage-3-review.md
+1. 解析需求 ID / `#里程碑`，定位 `design-consensus.md`
+2. 确认状态为 PENDING_DESIGN_REVIEW，且阶段 3 审核清单逐项通过（有缺项先打回阶段 2，不 approve）
+3. 在 design-consensus.md 末尾追加 `## 设计确认: APPROVED`
+4. 更新状态为 DEVELOPING
+5. 提示用户用 `/workflow next [#里程碑]` 进入开发阶段
 
----
+**B. 阶段 4 任务 plan 确认（PENDING_PLAN_REVIEW，仅复杂任务）** — 详见 stage-4-dev.md
+1. 定位当前任务的 plan `.task/{...}/plans/{模块名}-{X.Y}.md`
+2. 确认 plan 必含项齐全（签名/字段/时序/边界/测试用例/迁移）；缺项或方向问题 → 打回重出，不 approve
+3. 在 plan 末尾追加 `## 设计确认: APPROVED`，任务状态置 PLAN_CONFIRMED
+4. **★ 同步 design-consensus**：检查 plan 是否调整了 design-consensus 中约定的契约，如有则回写 design-consensus.md（详见 stage-4-dev.md「plan 确认后同步 design-consensus」）
+5. 提示用户用 `/workflow next` 开始该任务编码（对照已确认 plan）
 
-### `/php-workflow req list`
+**C. 阶段 4 CR 问题人工确认（PENDING_CR_REVIEW）** — 详见 stage-4-dev.md
+1. 定位当前正在审查的任务及其 CR 报告 `.task/review/{模块名}-{X.Y}.md`
+2. **零问题分支**：报告判 PASSED 无问题项 → 跳过裁决，任务置 CR_CONFIRMED，直接进第 4 步复验
+3. 有问题：确认人工裁决已填写（每条 ACCEPTED / REJECTED / MODIFIED）；若仍有 PENDING 的问题，提示用户先完成裁决，不推进。锁定裁决，任务置 CR_CONFIRMED
+4. **★ 同步 design-consensus**：如裁决中有 MODIFIED 项涉及 design-consensus 层面的契约变更，回写 design-consensus.md（详见 stage-4-dev.md「CR 裁决后同步 design-consensus」）
+5. 复验与改写：
+   - 有 ACCEPTED/MODIFIED 项 → 执行改写⑤（只改已采纳项）→ 复验⑥
+   - 零问题 / 全部 REJECTED（无可改）→ 跳过改写⑤，直接复验⑥（重跑 phpunit + php -l 确认绿）
+6. 复验通过 → 任务置 DONE，按⑥强制回写 progress.md + dev-tasks.md
+7. 提示用户用 `/workflow next` 继续下一个任务（或若全部 DONE，进入阶段 5）
 
-**用途**：列出所有父需求及其进度摘要。
+**D. 阶段 5 验收问题人工确认（PENDING_ACCEPT_REVIEW）** — 详见 stage-5-accept.md
+1. 定位验收报告 `.task/acceptance/acceptance.md`
+2. **零问题分支**：报告判 PASSED 无问题项 → 直接置 COMPLETED
+3. 有问题：确认人工裁决已填写（每条 ACCEPTED / REJECTED / MODIFIED）；若仍有 PENDING 的问题，提示用户先完成裁决，不推进。锁定裁决，状态置 ACCEPT_FIXING
+4. 修复与重验收：
+   - 有 ACCEPTED/MODIFIED 项 → 按关联任务分组，对每个受影响任务派 executor 修复（只改已采纳项）→ 修复后重新走收尾验收（完整流程）
+   - 全部 REJECTED（无需修复）→ 直接置 COMPLETED
+5. 提示用户等待重验收结果（或已 COMPLETED 时输出完成摘要）
 
-**处理步骤**：
-1. **无参数**
-2. **扫描** `docs/discuss/*/*/.task/parent.md` 全部文件
-3. **聚合**：每个父需求计算 子需求总数 / 已绑定版本数 / 平均阶段进度
-4. **输出格式**：
-   ```
-   父需求清单
+## `/workflow next [需求ID][#里程碑]`
+1. 解析需求 ID
+2. **多里程碑**：解析 `#里程碑`（省略时自动选中/列出选择）；读取该里程碑的当前阶段和状态。**单里程碑**：直接读需求级阶段与状态
+3. 根据状态分发到对应阶段的执行逻辑（阶段逻辑作用范围 = 选中的里程碑；单里程碑则 = 整个需求）——阶段细节见 stage-{2..5}-*.md
+4. **阶段 4 内**：首次进入时先按依赖图决定编码并行/串行（记入 progress.md）；推进当前未 DONE 任务——**复杂任务先出 plan 停在 PENDING_PLAN_REVIEW** 等 approve，确认后再编码；简单任务直接编码 → DoD → CR 扫描后**逐任务停在 PENDING_CR_REVIEW**，呈现该任务问题清单、提示用户裁决并 `/workflow approve`；不自动改写。多任务并行时按到达顺序逐个呈现各自的 plan / CR 门
+5. 如果当前是 PENDING_DESIGN_REVIEW / PENDING_PLAN_REVIEW / PENDING_CR_REVIEW / PENDING_ACCEPT_REVIEW，提示用户先 `/workflow approve`（不重复执行已停住的人工门）
+6. **依赖校验（多里程碑）**：若选中里程碑声明了前置依赖，且前置里程碑尚未到达约定阶段（如公共骨架未定稿），提示阻塞、不推进
 
-     payment/支付渠道重构       3 子需求 / 2 已绑定版本 / 平均阶段 3.5
-     order/订单取消优化         2 子需求 / 0 已绑定版本 / 平均阶段 1.0
-   ```
+## `/workflow status [需求ID][#里程碑]`
+- **不指定需求 ID 且有活动上下文**：顶部高亮显示当前活动（`▶ 活动: {需求ID}[#里程碑]`），并展示其详细进度
+- **不指定需求 ID 且无活动上下文**：扫描 `docs/discuss/` 下所有 `.task/progress.md`，汇总显示
+- **指定需求 ID、不带 `#里程碑`**：单里程碑显示该需求详细进度；多里程碑显示完整里程碑进度表
+- **指定 `#里程碑`**：只显示该里程碑的阶段记录与任务清单
 
-**缺参行为**：无参数命令，不存在缺参。
-
-**边界情况**：
-- 无任何父需求：显示"无父需求。建议：/php-workflow req create {service-name}/{父需求名} 创建第一个父需求"
-- 部分 metadata.md 字段损坏：用最简信息展示，不阻塞其他父需求
-
----
-
-### `/php-workflow req split {service-name}/{父需求名}`
-
-**用途**：交互式向导逐个创建子需求。向导中途支持 Ctrl+C 退出（AC17/D20）。
-
-**处理步骤**：
-1. **解析参数**：
-   - 必传：父需求 ID
-   - 缺参 → 报错：`[字段 parentReqId] 缺失。建议：/php-workflow req split payment/支付渠道重构`
-2. **校验父需求存在**：同 `req show`
-3. **扫描现有子需求**：列出 `docs/discuss/{service-name}/{父需求名}/.task/` 下已存在的子需求名（用于向导重名检查）
-4. **启动交互式向导**（循环询问，直到用户输入 `done` 或 Ctrl+C 退出）：
-   ```
-   === 子需求创建向导 ===
-   父需求: payment/支付渠道重构
-   现有子需求: alipay, wechat
-
-   输入新子需求名（或输入 done 完成 / Ctrl+C 中途退出）:
-   > refund
-   子需求 refund 的描述（1-2 句话）:
-   > 处理支付渠道退款逻辑
-   子需求 refund 影响的模块（逗号分隔）:
-   > payment, order
-
-   [确认创建子需求 refund？] (y/n/cancel)
-   > y
-   ✓ 已创建 docs/discuss/payment/支付渠道重构/.task/refund/metadata.md
-
-   输入新子需求名（或 done 完成）:
-   > done
-   === 向导结束：创建了 1 个子需求 ===
-   ```
-5. **每个子需求创建流程**：
-   a. 输入子需求名 → 重名检查（同父需求下不能重复）
-   b. 输入子需求描述（非空）
-   c. 输入模块影响（可空）
-   d. 确认创建（y/n/cancel）
-   e. 创建目录 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/`
-   f. 写入 metadata.md（8 字段模板）：
-      ```
-      subReqId: {service-name}/{父需求名}#{子需求名}
-      parentReqId: {service-name}/{父需求名}
-      versionBinding: （空，未绑定）
-      currentStage: 1
-      currentState: DISCUSSING
-      createdAt: {ISO8601}
-      updatedAt: {ISO8601}
-      阶段产物引用: （空）
-      ```
-6. **Ctrl+C 处理**：保存已完成创建的子需求到临时清单 `docs/discuss/{service-name}/{父需求名}/.task/.split-progress`，下次执行 `req split` 时提示"检测到上次未完成的向导，是否继续？(y/n)"，用户选择继续则从断点恢复
-7. **回显**：总结创建的子需求数 + 提示用户下一步用 `/php-workflow version create {版本号}` 绑定子需求
-
-**缺参行为**：缺父需求 ID 立即报错。
-
-**错误信息格式**：
-- `[字段 parentReqId] 缺失。建议：/php-workflow req split payment/支付渠道重构`
-- `[字段 subReqName {X}] 子需求名与现有子需求 {Y} 冲突。建议：选择其他名称`
-- `[字段 description] 描述不能为空。建议：填写 1-2 句话描述`
-
-**边界情况**：
-- 向导中途 Ctrl+C：已完成创建的子需求保留，未创建的不创建；记录断点到 `.split-progress`
-- 子需求名含特殊字符（含 `#`、`/`、`\`）：禁止，建议用 `-` 或 `_` 替代
-- 父需求阶段 1 未完成（讨论文档缺失）：不阻止 `req split`（`req split` 在任何阶段都可执行）
-
----
-
-## §B. `version` 命令族（9 个）
-
-> **所有 version 修改类命令通用前置**：执行任何修改类操作前，必须读取版本文件并检查 `status == ARCHIVED`，若 ARCHIVED 立即报错 `[字段 versionStatus] 版本已永久封存，禁止修改。建议：版本无修改需求，无需操作`（AC20/D23）
-
-### `/php-workflow version create {版本号}`
-
-**用途**：交互式创建版本，按 4 步流程固定执行（AC13/D16）。
-
-**处理步骤（4 步）**：
-
-**步骤 1：建空 DRAFT 文件**
-1. 解析版本号（必传，缺参报错）
-2. 校验版本号未存在：`docs/version/{版本号}` 不存在；存在则报错 `[字段 versionNumber {X}] 版本号已存在。建议：选择其他版本号或用 /php-workflow version show {X} 查看`
-3. 创建版本文件 `docs/version/{版本号}`，写入 9 字段初始值：
-   ```
-   versionNumber: {版本号}
-   status: DRAFT
-   subRequirements: （空数组）
-   createdAt: {ISO8601}
-   releasedAt: （空）
-   archivedAt: （空）
-   owner: （空）
-   description: （空）
-   stageRecord: （空）
-   ```
-
-**步骤 2：扫描未绑定子需求**
-1. 全局扫描 `docs/discuss/*/*/.task/*/metadata.md`
-2. 过滤条件：`metadata.md.versionBinding` 为空（未绑定任何版本）
-3. 输出候选清单（含完整 ID + 所属父需求 + 当前状态）
-
-**步骤 3：交互多选**
+**输出格式（单里程碑）**：
 ```
-=== version create 向导 ===
-当前版本: v1.0 (DRAFT)
+需求开发进度
 
-未绑定子需求候选（输入编号多选，逗号分隔；输入 done 完成；输入 cancel 退出）:
-  [1] payment/支付渠道重构#alipay    (DISCUSSING)
-  [2] payment/支付渠道重构#wechat    (DISCUSSING)
-  [3] order/订单取消优化#子需求1     (ANALYZING)
+  order/订单取消优化
+  阶段 3/5 — 设计审核（待审核）
+  影响模块: order, payment
+```
+**输出格式（多里程碑，带活动高亮）**：
+```
+▶ 活动: payment/支付渠道重构#alipay
 
-选择子需求编号（逗号分隔）:
-> 1,2
-[确认纳入 2 个子需求？] (y/n/cancel)
-> y
-✓ 选中: payment/支付渠道重构#alipay, payment/支付渠道重构#wechat
+需求开发进度  payment/支付渠道重构  [多里程碑]
+
+  里程碑 alipay ◀   阶段 4/5 — 开发与逐任务审查（进行中）  任务 2/5   模块: payment, order
+  里程碑 wechat     阶段 2/5 — 分析与设计（进行中）        任务 0/4   模块: payment, order  依赖: 公共基础
 ```
 
-**步骤 4：回写 metadata.md.versionBinding**
-1. 对每个选中的子需求：
-   a. 读 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/metadata.md`
-   b. **冲突检查**（AC6 + Appendix A）：若 `versionBinding` 字段非空 → 报错 `[字段 subReqId {X}] 已绑定版本 {Y}，不可重复绑定。建议：先 /php-workflow version show {Y}，或选择其他未绑定子需求`
-   c. 回写 `versionBinding: {版本号}` + 更新 `updatedAt: {当前ISO8601}`
-   d. **类型校验**：回写时确保 `versionBinding` 是单值字符串，不是数组（AC6）
-2. 更新 `docs/version/{版本号}` 的 `subRequirements` 字段为完整 ID 数组：
+## `/workflow list`
+扫描 `docs/discuss/` 下所有 `.task/progress.md`，只显示**未完成**的需求（状态不是 COMPLETED）。多里程碑需求在条目下附各里程碑一行简况。
+
+## `/workflow rework [需求ID][#里程碑]`
+设计/实现缺陷返工 —— **详见 rework.md**。
+
+## `/workflow followup {已完成需求ID} [新需求名]`
+
+基于已完成需求发起新需求——用于需求交付后追加功能、做优化、或处理遗留项。新需求独立走完整 5 阶段流程，但自动继承父需求的设计上下文作为参考。
+
+1. **解析父需求 ID**（支持模糊匹配）。校验其 progress.md 状态为 **COMPLETED**；非 COMPLETED 则拒绝并提示：
+   - 进行中的需求 → 用 `/workflow next` 继续推进
+   - 有设计/实现缺陷 → 用 `/workflow rework`
+2. 询问用户**新需求名**（未提供时）和**业务域**（默认沿用父需求的域）
+3. **初始化新需求目录**：`docs/discuss/{需求ID}/`
+   - 创建 `docs/` 目录
+   - **自动复制父需求的关键产出物到 `docs/parent/`**：
+     - `design-consensus.md` → `docs/parent/design-consensus.md`（设计契约参考）
+     - `change-manifest.md` → `docs/parent/change-manifest.md`（交付清单参考，如存在）
+     - 多里程碑时额外复制 `design-foundation.md`（如存在）
+   - 提示用户可在 `docs/` 放入新的参考文档
+4. 创建 `.task/progress.md`（使用标准模板），**新增 `parent` 字段**：
    ```
-   subRequirements:
-     - payment/支付渠道重构#alipay
-     - payment/支付渠道重构#wechat
+   - 父需求: {域}/{父需求名}（已完成，设计参考见 docs/parent/）
    ```
-
-**缺参行为**：缺版本号立即报错。
-
-**错误信息格式**：
-- `[字段 versionNumber] 缺失。建议：/php-workflow version create v1.0`
-- `[字段 versionNumber {X}] 版本号已存在。建议：/php-workflow version show {X} 查看`
-- `[字段 subReqId {X}] 已绑定版本 {Y}，不可重复绑定。建议：选择其他未绑定子需求`
-- `[字段 candidateList] 无未绑定子需求。建议：先 /php-workflow req split 创建子需求`
-
-**边界情况**：
-- 候选为空（无可绑定子需求）：仍允许建空 DRAFT 版本（subRequirements 为空数组），提示"已创建空 DRAFT 版本"
-- Ctrl+C 中途退出：版本文件保留（即使空），不删除；下次执行 `version create {同版本号}` 会报"版本号已存在"，提示用 `version show` 查看
-- 版本号格式（`v1.0` / `2024Q1` / `v1.0-rc1`）：任何非空字符串均合法，不做 SemVer 校验
-- 多选时全部 `cancel`：不写回任何 metadata.md，提示"已取消，版本保留为 DRAFT 空版本"
-
----
-
-### `/php-workflow version show {版本号}`
-
-**用途**：显示版本详情（含子需求列表 + 阶段记录 + 状态机位置）。
-
-**处理步骤**：
-1. 解析版本号（缺参报错）
-2. 校验 `docs/version/{版本号}` 存在；不存在则报错
-3. 解析 9 字段
-4. **实时聚合子需求状态**：从各 metadata.md 读取 `currentState`，不缓存到版本文件（spec C2/D3）
-5. **输出格式**：
+   状态设为 `DISCUSSING`（而非直接 ANALYZING，因为需要先讨论增量变更）
+5. 用户确认参考文档后，调用 `/devops-discuss` skill。**在 prompt 中附加上下文**：
    ```
-   版本详情  v1.0
-
-     状态: IN_PROGRESS
-     创建时间: 2026-07-06 10:30
-     发布时间: （未发布）
-     归档时间: （未归档）
-     描述: 2026 Q3 发布批次
-
-     子需求清单（2 个，实时聚合自 metadata.md）:
-       payment/支付渠道重构#alipay   当前状态: DEVELOPING
-       payment/支付渠道重构#wechat   当前状态: ANALYZING
-
-     阶段记录:
-       2026-07-06 10:30  创建 (DRAFT)
-       2026-07-06 11:00  start (DRAFT → IN_PROGRESS)
+   本需求基于已完成需求「{父需求名}」发起。
+   父需求的设计契约见 docs/parent/design-consensus.md，交付清单见 docs/parent/change-manifest.md。
+   讨论重点聚焦增量变更——新增/优化了什么、与父需求设计的差异点、是否需要调整已有契约。
    ```
+6. **设为活动上下文**（写入 `docs/discuss/.workflow-active`）
+7. 提示用户讨论完成后 `/workflow next` 进入分析与设计
 
-**缺参行为**：缺版本号立即报错。
-
-**错误信息格式**：
-- `[字段 versionNumber] 缺失。建议：/php-workflow version show v1.0`
-- `[字段 versionNumber {X}] 版本不存在。建议：/php-workflow version list 查看全部版本`
-
-**边界情况**：
-- 版本含 0 个子需求：显示"子需求清单（0 个）"，状态机不可推进
-- 子需求 metadata.md 损坏：标注"⚠️ metadata 损坏"，不阻塞其他子需求展示
-
----
-
-### `/php-workflow version list`
-
-**用途**：列出所有版本及其状态。
-
-**处理步骤**：
-1. 无参数
-2. 扫描 `docs/version/*` 全部文件
-3. 解析每个版本的 `versionNumber / status / subRequirements.length / createdAt`
-4. **输出格式**：
-   ```
-   版本清单
-
-     v1.0     IN_PROGRESS   2 子需求   2026-07-06 10:30
-     v1.1     DRAFT         0 子需求   2026-07-05 14:20
-     v2.0     ARCHIVED      5 子需求   2026-05-01 09:00
-   ```
-
-**缺参行为**：无参数命令。
-
-**边界情况**：
-- 无任何版本：显示"无版本。建议：/php-workflow version create {版本号} 创建"
-
----
-
-### `/php-workflow version add-sub {版本号} {子需求ID}`
-
-**用途**：向已存在的 DRAFT 版本增量加入子需求（D16 补充）。
-
-**处理步骤**：
-1. **解析参数**：
-   - 必传：版本号 + 子需求 ID
-   - 缺任一参 → 报错
-2. **校验版本存在**：同 `version show`
-3. **前置校验 1 — 状态门**：读版本 `status` 字段
-   - 必须是 `DRAFT`，其他状态报错：`[字段 versionStatus {currentStatus}] 只能在 DRAFT 状态添加子需求。建议：版本已锁定，不可修改`
-4. **前置校验 2 — ARCHIVED 只读**：若 `status == ARCHIVED` → 报错（AC20）
-5. **校验子需求存在**：`metadata.md` 必须存在；不存在报错
-6. **冲突检查（AC6）**：读子需求 `versionBinding` 字段
-   - 若已绑定 → 报错：`[字段 subReqId {X}] 已绑定版本 {Y}。建议：先解除绑定（当前版本不支持解绑，需新建版本）`
-7. **回写**：
-   a. 子需求 `metadata.md`：写入 `versionBinding: {版本号}` + 更新 `updatedAt`
-   b. 版本文件 `docs/version/{版本号}`：追加到 `subRequirements` 数组 + 更新 `stageRecord`
-8. **回显**：列出新增子需求 + 当前 subRequirements 总数
-
-**缺参行为**：
-- 缺版本号 → `[字段 versionNumber] 缺失。建议：/php-workflow version add-sub v1.0 payment/支付渠道重构#alipay`
-- 缺子需求 ID → `[字段 subReqId] 缺失。建议：/php-workflow version add-sub v1.0 payment/支付渠道重构#alipay`
-
-**错误信息格式**：
-- `[字段 versionStatus {currentStatus}] 只能在 DRAFT 状态添加子需求。建议：版本已锁定，不可修改`
-- `[字段 subReqId {X}] 已绑定版本 {Y}。建议：先解除绑定`
-- `[字段 versionStatus] 版本已永久封存，禁止修改`
-
-**边界情况**：
-- 子需求 ID 格式错（缺 `#`）：报错 `[字段 subReqId] 格式非法，必须含 #。建议：payment/支付渠道重构#alipay`
-- 子需求 ID 含多个 `#`：按最后一个 `#` 拆分（Appendix A）
-
----
-
-### `/php-workflow version start {版本号}`
-
-**用途**：DRAFT → IN_PROGRESS（AC14）。
-
-**处理步骤**：
-1. 解析版本号（缺参报错）
-2. **前置校验 0 — ARCHIVED 只读**（AC20）
-3. **前置校验 1 — 当前状态**：读 `status` 字段
-   - 必须是 `DRAFT`，其他状态报错：
-     - `IN_PROGRESS` → `[字段 versionStatus IN_PROGRESS] 版本已在 IN_PROGRESS。建议：/php-workflow version show {X} 查看进度`
-     - `READY` → `[字段 versionStatus READY] 版本已到 READY，无法再 start。建议：用 /php-workflow version ready {X} 进入下一阶段`
-     - `RELEASED` → `[字段 versionStatus RELEASED] 版本已发布，无法 start。建议：/php-workflow version archive {X} 归档后建新版本`
-     - `ARCHIVED` → `[字段 versionStatus] 版本已永久封存`
-4. **前置校验 2 — 子需求数**：必须 ≥ 1 个子需求
-   - 为空 → 报错：`[字段 subRequirements] 版本无子需求，无法启动。建议：/php-workflow version add-sub {X} {子需求ID} 添加子需求`
-5. **前置校验 3 — 子需求状态**：检查所有子需求 `currentState`
-   - 至少 1 个子需求 ∈ {ANALYZING, PENDING_DESIGN_REVIEW, DEVELOPING, PENDING_PLAN_REVIEW, PENDING_CR_REVIEW, REVIEWING}
-   - 全是 `DISCUSSING` 或 `COMPLETED` → 报错：`[字段 subReqState] 所有子需求都未进入执行阶段。建议：用 /php-workflow next {子需求ID} 推进子需求`
-6. **状态转换**：写 `status: IN_PROGRESS` 到版本文件 + 追加 `stageRecord` 时间戳
-7. **回显**：版本新状态 + 列出当前子需求进度
-
-**缺参行为**：`[字段 versionNumber] 缺失。建议：/php-workflow version start v1.0`
-
-**错误信息格式**：
-- `[字段 subRequirements] 版本无子需求，无法启动。建议：/php-workflow version add-sub {X} {子需求ID}`
-- `[字段 subReqState] 所有子需求都未进入执行阶段。建议：/php-workflow next {子需求ID} 推进子需求`
-
-**边界情况**：
-- ARCHIVED 版本触发：通用前置立即报错，不进入具体校验
-
----
-
-### `/php-workflow version ready {版本号}`
-
-**用途**：IN_PROGRESS → READY（AC14）。要求所有子需求都 COMPLETED。
-
-**处理步骤**：
-1. 解析版本号（缺参报错）
-2. **前置校验 0 — ARCHIVED 只读**
-3. **前置校验 1 — 当前状态**：
-   - 必须是 `IN_PROGRESS`，其他状态报错：
-     - `DRAFT` → `[字段 versionStatus DRAFT] 版本未启动。建议：/php-workflow version start {X} 先启动`
-     - `READY` → `[字段 versionStatus READY] 版本已 READY。建议：用 /php-workflow version close {X} 发布`
-     - `RELEASED` → `[字段 versionStatus RELEASED] 版本已发布`
-     - `ARCHIVED` → `[字段 versionStatus] 版本已永久封存`
-4. **前置校验 2 — 子需求状态**：所有子需求 `currentState == COMPLETED`
-   - 任一子需求非 COMPLETED → 报错：
-     ```
-     [字段 subReqState] 存在未完成的子需求:
-       - payment/支付渠道重构#alipay 当前状态: DEVELOPING
-       - order/订单取消优化#子1 当前状态: ANALYZING
-     建议：用 /php-workflow next {子需求ID} 推进到 COMPLETED，或 /php-workflow rework {子需求ID} 返工
-     ```
-5. **状态转换**：写 `status: READY` + 追加 `stageRecord`
-6. **回显**：版本新状态 + 提示下一步用 `version close`
-
-**缺参行为**：`[字段 versionNumber] 缺失。建议：/php-workflow version ready v1.0`
-
-**错误信息格式**：
-- `[字段 subReqState] 存在未完成的子需求: {清单}。建议：/php-workflow next {子需求ID} 或 /php-workflow rework {子需求ID}`
-
-**边界情况**：
-- 子需求状态含 `DISCUSSING`：算未完成，必须先推进
-- 子需求状态含错误字符串（非合法 7 态）：报错 `[字段 subReqState {X}] 状态非法。建议：用 /php-workflow req show {父需求ID} 检查子需求 metadata.md`
-
----
-
-### `/php-workflow version close {版本号}`
-
-**用途**：READY → RELEASED（AC14）。发布版本，写发布时间戳。
-
-**处理步骤**：
-1. 解析版本号（缺参报错）
-2. **前置校验 0 — ARCHIVED 只读**
-3. **前置校验 1 — 当前状态**：
-   - 必须是 `READY`，其他状态报错：
-     - `DRAFT` → `[字段 versionStatus DRAFT] 版本未启动。建议：/php-workflow version start {X}`
-     - `IN_PROGRESS` → `[字段 versionStatus IN_PROGRESS] 子需求未全部完成。建议：用 /php-workflow next {子需求ID} 推进或 /php-workflow version ready {X} 进入 READY`
-     - `RELEASED` → `[字段 versionStatus RELEASED] 版本已发布。建议：/php-workflow version archive {X} 归档`
-     - `ARCHIVED` → `[字段 versionStatus] 版本已永久封存`
-4. **二次确认**（破坏性操作）：提示用户"即将发布版本 {X}，所有子需求标记为正式交付。确认？(y/n)"
-5. **状态转换**：
-   - 写 `status: RELEASED`
-   - 写 `releasedAt: {当前ISO8601}`
-   - 追加 `stageRecord`
-6. **回显**：版本新状态 + 发布时间 + 提示"版本发布后禁止 rework"
-
-**缺参行为**：`[字段 versionNumber] 缺失。建议：/php-workflow version close v1.0`
-
-**错误信息格式**：
-- `[字段 versionStatus {current}] 状态不符。close 需要 READY。建议：/php-workflow version ready {X}`
-
-**边界情况**：
-- ARCHIVED 触发：通用前置报错，不进入具体校验
-
----
-
-### `/php-workflow version archive {版本号}`
-
-**用途**：RELEASED → ARCHIVED（AC14 + AC20）。永久封存，不可恢复。
-
-**处理步骤**：
-1. 解析版本号（缺参报错）
-2. **前置校验 0 — ARCHIVED 只读**：若 `status == ARCHIVED` → **直接报错并停止**：
-   ```
-   [字段 versionStatus ARCHIVED] 版本已归档，不可重复归档。建议：ARCHIVED 是状态机终点，无修改入口
-   ```
-   （不再继续后续检查，避免死循环）
-3. **前置校验 1 — 当前状态**：
-   - 必须是 `RELEASED`，其他状态报错：
-     - `DRAFT` → `[字段 versionStatus DRAFT] 版本未发布，无法归档。建议：先 /php-workflow version start → ready → close`
-     - `IN_PROGRESS` → `[字段 versionStatus IN_PROGRESS] 版本未发布`
-     - `READY` → `[字段 versionStatus READY] 版本未发布，建议先 /php-workflow version close {X}`
-4. **二次确认**（破坏性 + 不可逆）：提示"即将归档版本 {X}，归档后永久只读，禁止任何修改。确认？(y/n)"
-5. **状态转换**：
-   - 写 `status: ARCHIVED`
-   - 写 `archivedAt: {当前ISO8601}`
-   - 追加 `stageRecord`
-6. **回显**：版本新状态 + 归档时间 + 强警告"ARCHIVED 不可逆"
-
-**缺参行为**：`[字段 versionNumber] 缺失。建议：/php-workflow version archive v1.0`
-
-**错误信息格式**：
-- `[字段 versionStatus ARCHIVED] 版本已归档，不可重复归档。建议：ARCHIVED 是状态机终点`
-- `[字段 versionStatus {current}] 状态不符。archive 需要 RELEASED。建议：先 /php-workflow version close {X}`
-
-**边界情况**：
-- 已 ARCHIVED 版本触发：步骤 2 直接报错，不进入步骤 3（避免后续校验逻辑误触）
-- ARCHIVED 后所有修改类命令：通用前置规则拦截，统一报错"版本已永久封存"
-
----
-
-## §C. 保留命令（5 个）
-
-> 所有保留命令缺参时统一行为：报错 + 扫描 `docs/discuss/` 与 `docs/version/` 列出可选项（AC16/D19）。
-
-### `/php-workflow next {子需求ID}`
-
-**用途**：推进指定子需求到下一阶段。替代 v1 缺省活动指针的隐式行为。
-
-**处理步骤**：
-1. **解析子需求 ID**：
-   - 缺参 → 报错：
-     ```
-     [字段 subReqId] 缺失。建议：显式传子需求ID，格式 {service-name}/{父需求名}#{子需求名}
-
-     当前可推进的子需求（扫描自 metadata.md，currentState ≠ COMPLETED）:
-       - payment/支付渠道重构#alipay    当前状态: DEVELOPING
-       - order/订单取消优化#子1        当前状态: ANALYZING
-
-     用法: /php-workflow next {子需求ID}
-     ```
-2. **校验子需求存在**：`metadata.md` 必须存在；不存在则报错 `[字段 subReqId {X}] 子需求不存在`
-3. **校验版本绑定**：读 `metadata.md.versionBinding`
-   - 为空 → 报错：`[字段 versionBinding] 子需求 {X} 未绑定版本，无法推进。建议：用 /php-workflow version add-sub {V} {X} 绑定后重试`
-   - 绑定的版本 → 读版本 `status`：
-     - `ARCHIVED` → 报错 `[字段 versionStatus] 版本已永久封存，禁止推进子需求`
-     - `DRAFT` → 报错 `[字段 versionStatus DRAFT] 版本未启动，子需求不能推进。建议：/php-workflow version start {V}`
-     - `RELEASED` 或 `ARCHIVED` → 禁止任何修改类操作
-4. **状态分发**：根据 `metadata.md.currentState` 分发到对应阶段执行逻辑
-   - `DISCUSSING` → 阶段 1（仅当父需求下所有子需求都是 DISCUSSING 时触发父需求讨论）
-   - `ANALYZING` → 阶段 2（设计）
-   - `PENDING_DESIGN_REVIEW` → 提示用户先 `/php-workflow approve`（不重复执行）
-   - `DEVELOPING` → 阶段 4（任务闭环）
-   - `PENDING_PLAN_REVIEW` / `PENDING_CR_REVIEW` → 提示用户先 `approve`
-   - `REVIEWING` → 阶段 5（验收）
-   - `COMPLETED` → 提示"子需求已完成，无需推进"
-5. **阶段执行**：调用 `stage-{2..5}-*.md` 描述的处理步骤（详见各 stage 文件）
-6. **状态回写**：写 `metadata.md.currentState` + `currentStage` + `updatedAt` + `阶段产物引用`
-7. **回显**：新状态 + 阶段进度 + 提示下一步操作
-
-**缺参行为**：报错 + 列出全部可推进子需求（AC16）。
-
-**错误信息格式**：
-- `[字段 subReqId] 缺失。建议：/php-workflow next {service-name}/{父需求名}#{子需求名}`
-- `[字段 subReqId {X}] 子需求不存在。建议：用 /php-workflow req show {父需求ID} 查看`
-- `[字段 versionBinding] 子需求 {X} 未绑定版本，无法推进。建议：/php-workflow version add-sub {V} {X}`
-- `[字段 versionStatus DRAFT] 版本未启动，子需求不能推进。建议：/php-workflow version start {V}`
-
-**边界情况**：
-- 多个子需求处于同一状态：缺参时全部列出，不自动选中
-- 子需求处于审核门（`*_REVIEW`）：不推进，提示先 `approve`
-- 子需求状态机非法字符串：报错 `[字段 currentState {X}] 状态非法`
-
----
-
-### `/php-workflow approve {子需求ID}`
-
-**用途**：确认子需求当前的人工检查点。
-
-**处理步骤**：
-1. **解析子需求 ID**：
-   - 缺参 → 报错：
-     ```
-     [字段 subReqId] 缺失。建议：显式传子需求ID
-
-     当前待审核的子需求（currentState 含 REVIEW）:
-       - payment/支付渠道重构#alipay    当前状态: PENDING_DESIGN_REVIEW
-       - payment/支付渠道重构#wechat    当前状态: PENDING_CR_REVIEW
-
-     用法: /php-workflow approve {子需求ID}
-     ```
-2. **校验子需求存在**
-3. **校验版本绑定**：同 `next`
-4. **状态分发**：根据 `currentState` 分发到对应审核门
-   - `PENDING_DESIGN_REVIEW` → 阶段 3 设计审核（详见 stage-3-review.md §A）
-   - `PENDING_PLAN_REVIEW` → 阶段 4 任务 plan 确认（详见 stage-4-dev.md）
-   - `PENDING_CR_REVIEW` → 阶段 4 CR 问题裁决（详见 stage-4-dev.md）
-5. **审核执行**：详见各 stage 文件
-6. **状态回写**：审核通过 → 推进到下一状态；审核打回 → 状态回退到对应阶段
-
-**缺参行为**：报错 + 列出全部待审核子需求（AC16）。
-
-**错误信息格式**：
-- `[字段 subReqId] 缺失。建议：/php-workflow approve {service-name}/{父需求名}#{子需求名}`
-- `[字段 subReqId {X}] 子需求不在审核门状态（currentState 不含 REVIEW）。建议：用 /php-workflow next {X} 推进到审核门`
-
-**边界情况**：
-- 子需求非审核门状态：报错并提示当前状态
-- ARCHIVED 版本下子需求：通用前置拦截
-
----
-
-### `/php-workflow status [子需求ID|版本号]`
-
-**用途**：显示进度（子需求或版本）。缺参时汇总所有进行中的子需求与版本。
-
-**处理步骤**：
-1. **解析参数类型**：
-   - 不传参 → 扫描模式：扫描 `docs/discuss/*/*/.task/*/metadata.md` + `docs/version/*`，列出全部进行中（currentState ≠ COMPLETED 且 versionBinding ≠ 空）的子需求 + 全部非 ARCHIVED 的版本
-   - 传子需求 ID（含 `#`）→ 子需求详情模式：显示该子需求 metadata.md 全部字段 + 阶段记录
-   - 传版本号 → 版本详情模式：同 `version show`
-2. **校验目标存在**：不存在则报错
-3. **校验版本绑定**（子需求模式）：未绑定则显示提示"子需求未绑定版本"
-4. **输出格式**（子需求详情模式）：
-   ```
-   子需求详情  payment/支付渠道重构#alipay
-
-     父需求: payment/支付渠道重构
-     版本绑定: v1.0
-     当前阶段: 4/5 — 开发与逐任务审查
-     当前状态: DEVELOPING
-     创建时间: 2026-07-06 10:30
-     更新时间: 2026-07-06 14:20
-
-     阶段产物引用:
-       阶段 1: docs/discuss/payment/支付渠道重构/.task/alipay/analysis/...
-       阶段 2: docs/discuss/payment/支付渠道重构/.task/alipay/design-consensus.md
-       阶段 3: （暂无）
-   ```
-
-**缺参行为**：扫描 + 列出全部可选项（AC16）。
-
-**错误信息格式**：
-- `[字段 subReqId {X}] 子需求不存在。建议：用 /php-workflow req list 查看`
-- `[字段 versionNumber {X}] 版本不存在。建议：用 /php-workflow version list 查看`
-
-**边界情况**：
-- 目标含 ARCHIVED 版本：仍可显示（只读），但显示"⚠️ ARCHIVED 只读"
-- 扫描模式无任何目标：显示"无进行中子需求或版本。建议：/php-workflow req create 创建父需求"
-
----
-
-### `/php-workflow rework {子需求ID}`
-
-**用途**：子需求从 COMPLETED 回退到 ANALYZING。**强门禁：版本状态必须 ∈ {DRAFT, IN_PROGRESS, READY}**（D22/AC19）。
-
-**处理步骤**：
-1. **解析子需求 ID**：
-   - 缺参 → 报错：
-     ```
-     [字段 subReqId] 缺失。建议：显式传子需求ID
-
-     当前可 rework 的子需求（currentState = COMPLETED 且版本未封存）:
-       - payment/支付渠道重构#alipay    当前状态: COMPLETED, 版本: v1.0 (IN_PROGRESS)
-
-     用法: /php-workflow rework {子需求ID}
-     ```
-2. **校验子需求存在**
-3. **校验子需求状态**：`currentState == COMPLETED`
-   - 非 COMPLETED → 报错：`[字段 currentState {X}] rework 要求 COMPLETED 状态。建议：用 /php-workflow next {X} 推进到 COMPLETED 后再 rework`
-4. **强门禁 — 版本状态校验**（AC19/D22）：
-   - 读 `metadata.md.versionBinding` → 读版本 `status`
-   - **DRAFT / IN_PROGRESS / READY** → 通过门禁，继续步骤 5
-   - **RELEASED** → 报错：`[字段 versionStatus RELEASED] 版本已发布，禁止 rework。建议：如需修复请新建子需求并 /php-workflow version add-sub 加入新版本`
-   - **ARCHIVED** → 报错：`[字段 versionStatus] 版本已永久封存，禁止 rework`
-5. **执行 rework**：详见 `rework.md`，含返工单路径 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/rework/R{n}-{原因}.md`
-6. **状态回写**：
-   - `currentState: COMPLETED → ANALYZING`
-   - `currentStage: 5 → 2`
-   - 更新 `updatedAt`
-   - 追加返工单引用到 `阶段产物引用`
-
-**缺参行为**：报错 + 列出可 rework 的子需求（AC16）。
-
-**错误信息格式**：
-- `[字段 subReqId] 缺失。建议：/php-workflow rework {service-name}/{父需求名}#{子需求名}`
-- `[字段 currentState {X}] rework 要求 COMPLETED 状态。建议：用 /php-workflow next {X} 推进到 COMPLETED 后再 rework`
-- `[字段 versionStatus RELEASED] 版本已发布，禁止 rework。建议：新建子需求 + 新版本`
-- `[字段 versionStatus] 版本已永久封存，禁止 rework`
-
-**边界情况**：
-- 子需求已 rework 过：允许再次 rework，每次返工独立编号（R{n} 单调递增）
-- 版本 DRAFT 状态下子需求 COMPLETED：理论上不应存在（DRAFT 阶段子需求应未启动），若出现则报错提示用户检查 metadata.md
-
----
-
-### `/php-workflow summary {版本号}`
-
-**用途**：按版本聚合 DDL / Job·MQ / API 清单（AC9）。替代 v1 按需求聚合的旧行为。
-
-**处理步骤**：
-1. **解析版本号**：
-   - 缺参 → 报错：
-     ```
-     [字段 versionNumber] 缺失。建议：显式传版本号
-
-     可汇总的版本（含子需求）:
-       - v1.0 (IN_PROGRESS)  2 子需求
-       - v1.1 (DRAFT)         0 子需求
-
-     用法: /php-workflow summary {版本号}
-     ```
-2. **校验版本存在**：`docs/version/{版本号}` 必须存在
-3. **读 subRequirements 数组**：从版本文件读子需求列表（完整 ID）
-4. **逐子需求聚合**：对每个子需求，扫描 `docs/discuss/{service-name}/{父需求名}/.task/{子需求名}/` 下的阶段产物
-   - 阶段 2 产物：`analysis/` 目录的 DDL 文件
-   - 阶段 4 产物：`plans/` 目录的 Job·MQ 任务清单 + `done/` 目录的 API 实现记录
-   - 阶段 5 产物：`acceptance.md` 中确认的 API 接口清单
-5. **输出格式**：
-   ```
-   版本交付清单  v1.0
-
-     状态: IN_PROGRESS
-     子需求数: 2
-     发布窗口: 待发布
-
-     === 子需求 1: payment/支付渠道重构#alipay ===
-     DDL:
-       - ALTER TABLE payment_order ADD COLUMN alipay_trade_no VARCHAR(64);
-       - CREATE INDEX idx_alipay_trade_no ON payment_order(alipay_trade_no);
-
-     Job·MQ:
-       - 异步任务 AlipayRefundJob（路径: src/Job/AlipayRefundJob.php）
-
-     API:
-       - POST /api/payment/alipay/refund（路径: src/Controller/Payment/AlipayRefundController.php）
-
-     === 子需求 2: payment/支付渠道重构#wechat ===
-     DDL: （暂无）
-     Job·MQ: （暂无）
-     API: （暂无）
-   ```
-6. **回显**：提示用户把清单交给 DBA / 前端
-
-**缺参行为**：报错 + 列出可汇总的版本（AC16）。
-
-**错误信息格式**：
-- `[字段 versionNumber] 缺失。建议：/php-workflow summary v1.0`
-- `[字段 versionNumber {X}] 版本不存在。建议：用 /php-workflow version list 查看`
-
-**边界情况**：
-- 版本含 0 个子需求：显示"版本无子需求，聚合清单为空"
-- 子需求阶段产物缺失：相应分类显示"（暂无）"，不阻塞其他子需求
-- ARCHIVED 版本：仍可读聚合清单（只读）
-
----
-
-## §D. 已删除命令（3 个，硬切换，无兼容）
-
-> 以下命令在 v2 中**已被完全删除**，执行时直接报错并提示使用替代命令。
-
-### ❌ `/php-workflow use [需求ID][#里程碑]`
-
-**v2 状态**：已删除。活动指针 `docs/discuss/.workflow-active` 已废弃（AC7）。
-
-**触发行为**：
+**输出格式**：
 ```
-[字段 commandName] 已废弃。建议：v2 不支持活动指针，必须显式传子需求ID或版本号
-迁移指南:
-  - use {需求ID}            → 直接传子需求ID 给 next/approve/status
-  - use #{里程碑}           → 用 /php-workflow req list + 选子需求
-  - 设置活动上下文          → 已废弃；每次命令必须显式传参
+已基于「{父需求名}」(COMPLETED) 创建后续需求:
+  需求ID: {域}/{新需求名}
+  父需求: {域}/{父需求名}
+  设计参考: docs/parent/design-consensus.md
+
+请将新的参考文档放入 docs/ 目录，放好后回复确认进入讨论。
 ```
 
-### ❌ `/php-workflow split [需求ID] {里程碑列表}`
+> **与 `/workflow start` 的区别**：`start` 从零开始，无父需求上下文；`followup` 自动继承设计产出物、讨论聚焦增量、progress.md 记录关联关系。后续阶段 2 分析时 analyst 会同时参考父需求设计和新讨论结论。
 
-**v2 状态**：已删除。被 `req split` 替代（C5/D9）。
-
-**触发行为**：
-```
-[字段 commandName] 已废弃。建议：用 /php-workflow req split {父需求ID} 启动交互式向导创建子需求
-迁移指南:
-  - split {需求} {里程碑1} {里程碑2} → /php-workflow req split {service-name}/{父需求名}
-  - 旧版里程碑已废弃，子需求同级扁平化
-```
-
-### ❌ `/php-workflow start {需求名}`
-
-**v2 状态**：已删除。被 `req create` 替代（C5/D9）。
-
-**触发行为**：
-```
-[字段 commandName] 已废弃。建议：用 /php-workflow req create {service-name}/{父需求名} 创建父需求
-迁移指南:
-  - start {需求名}          → /php-workflow req create {service-name}/{需求名}
-  - start 不再支持讨论入口；讨论入口由 req split 创建子需求后进入阶段 1
-```
-
----
-
-## §E. 错误信息格式规范（通用）
-
-> 所有命令统一使用三段式错误信息：**`[字段 {X}] {原因}。建议：{修复}`**（AC18/D21）
-
-**规范要点**：
-1. **第一段 `[字段 {X}]`**：明确指出错误字段名 + 当前值（如 `versionStatus IN_PROGRESS`）
-2. **第二段 `{原因}`**：简明扼要描述失败原因（动词开头，≤ 30 字）
-3. **第三段 `建议：{修复}`**：直接给出可执行的下一步命令或操作
-
-**示例**：
-- `[字段 versionNumber v1.0] 版本号已存在。建议：/php-workflow version show v1.0`
-- `[字段 subReqId payment/...#alipay] 已绑定版本 v0.9。建议：选择其他未绑定子需求`
-- `[字段 versionStatus ARCHIVED] 版本已永久封存，禁止修改。建议：版本无修改需求`
-- `[字段 subReqId] 缺失。建议：/php-workflow next {service-name}/{父需求名}#{子需求名}`
-
-**禁止写法**：
-- ❌ `参数错误`（无字段名）
-- ❌ `版本不存在，请检查`（无具体值，无修复命令）
-- ❌ `操作失败`（无字段、无原因、无建议）
-
----
-
-## §F. 命令速查表（17 启用 + 3 删除）
-
-| 命令族 | 命令 | 必传参数 | 主要校验 |
-|--------|------|----------|----------|
-| `req` | `create` | `{service-name}/{父需求名}` | 父需求不存在 |
-| `req` | `show` | `{service-name}/{父需求名}` | 父需求存在 |
-| `req` | `list` | （无） | 扫描 |
-| `req` | `split` | `{service-name}/{父需求名}` | 父需求存在 + 子需求名重名 |
-| `version` | `create` | `{版本号}` | 版本号未存在 + 子需求归属唯一 |
-| `version` | `show` | `{版本号}` | 版本存在 |
-| `version` | `list` | （无） | 扫描 |
-| `version` | `add-sub` | `{版本号} {子需求ID}` | 版本 DRAFT + 子需求未绑定 |
-| `version` | `start` | `{版本号}` | DRAFT + ≥1 子需求 + ≥1 子需求已推进 |
-| `version` | `ready` | `{版本号}` | IN_PROGRESS + 全部子需求 COMPLETED |
-| `version` | `close` | `{版本号}` | READY |
-| `version` | `archive` | `{版本号}` | RELEASED |
-| 保留 | `next` | `{子需求ID}` | 子需求存在 + 版本已启动 + 非 ARCHIVED |
-| 保留 | `approve` | `{子需求ID}` | 子需求在审核门状态 |
-| 保留 | `status` | `[子需求ID|版本号]` | 目标存在 |
-| 保留 | `rework` | `{子需求ID}` | 子需求 COMPLETED + 版本非 RELEASED/ARCHIVED |
-| 保留 | `summary` | `{版本号}` | 版本存在 |
-| ❌ 删除 | `use` | — | 报错"已废弃" |
-| ❌ 删除 | `split` | — | 报错"已废弃" |
-| ❌ 删除 | `start` | — | 报错"已废弃" |
-
-**总命令数**：17 启用（4 req + 9 version + 5 保留 - 1 重复注意：version 是 8 个？见下）
-> 修正：version 是 9 个（create / show / list / add-sub / start / ready / close / archive / 共 8 个；再加 req 4 个 + 保留 5 个 = 17）
-
-**修正计数**：
-- req：create / show / list / split = **4 个**
-- version：create / show / list / add-sub / start / ready / close / archive = **8 个**
-- 保留：next / approve / status / rework / summary = **5 个**
-- **合计启用：4 + 8 + 5 = 17 个**（AC3）
-- **删除：use / split / start = 3 个**
+## `/workflow summary [需求ID][#里程碑]`
+产出里程碑交付清单（DDL / 新增 Job·MQ / API 接口清单），给 DBA 与前端 —— **详见 summary.md**。建议阶段 5 验收通过后执行。
