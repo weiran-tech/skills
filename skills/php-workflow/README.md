@@ -2,7 +2,7 @@
 
 状态机驱动的开发流程 skill。把"需求讨论 → 分析设计 → 开发 → 审查 → 验收"串成一个统一入口，用 `progress.md` 记录状态，每次 `/workflow next` 自动决定下一步调度哪个 agent、传什么参数。
 
-面向伪多模块单体项目：代码都在同一仓库 `modules/{模块}` 下，跨模块走 Events/Listeners + Service，审查按模块路径过滤 diff，架构上下文取自 `docs/{module}/`（arch-analyzer 产出）。测试/校验等具体命令默认按 PHP 工具链（phpunit / php -l），可按项目配置替换。
+面向伪多模块单体项目：代码都在同一仓库 `modules/{模块}` 下，跨模块走 Events/Listeners + Service，审查按模块路径过滤 diff，架构上下文取自 `docs/workflow/{module}/`（php-analyzer 产出）。测试/校验等具体命令默认按 PHP 工具链（phpunit / php -l），可按项目配置替换。
 
 ---
 
@@ -22,7 +22,7 @@
 ## 五阶段 + 四人工门 主流程
 
 ```
-  阶段1 需求讨论        /workflow start  → devops-discuss 多轮对话
+  阶段1 需求讨论        /workflow start  → /devops-discuss 多轮对话
      │ (产出 docs/discuss/{需求ID}.md)
      ▼
   阶段2 分析与设计      /workflow next   → analyst 逐模块分析 + ralph 汇总设计
@@ -202,7 +202,7 @@ TODO
 
 ```bash
 # 订单取消优化已 COMPLETED，现在要基于它做"取消原因统计"
-/workflow followup order/订单取消优化 取消原因统计
+/workflow followup 2026-09-12-order-订单取消优化 取消原因统计
 #   → 自动继承父需求设计文档到 docs/parent/
 #   → 进入阶段 1 讨论，聚焦增量变更
 #   → 讨论完成后 /workflow next 走标准 5 阶段流程
@@ -212,7 +212,7 @@ TODO
 
 ```bash
 # 阶段5 验收时发现 design-consensus 的方案有缺陷，多个已 DONE 任务受影响
-/workflow rework payment/支付渠道重构#alipay
+/workflow rework 2026-07-09-payment-支付渠道重构#alipay
 #   → 确认根因层级 = 设计级
 #   → design-consensus 标 "## 返工修订 R1"，里程碑退回阶段2
 #   → 自动算出依赖该设计的下游任务，列给你确认（可增删）
@@ -220,9 +220,9 @@ TODO
 #   → progress.md 追加返工记录 R1
 
 # 修订设计 → 重审 → 受影响任务级联重跑
-/workflow next payment/支付渠道重构#alipay     # 阶段2 修订 design-consensus
-/workflow approve payment/支付渠道重构#alipay  # 阶段3 重审通过
-/workflow next payment/支付渠道重构#alipay     # 复杂任务重出 plan → 重 code → 重 CR
+/workflow next 2026-07-09-payment-支付渠道重构#alipay     # 阶段2 修订 design-consensus
+/workflow approve 2026-07-09-payment-支付渠道重构#alipay  # 阶段3 重审通过
+/workflow next 2026-07-09-payment-支付渠道重构#alipay     # 复杂任务重出 plan → 重 code → 重 CR
 ```
 
 ---
@@ -255,7 +255,7 @@ docs/discuss/
 
 ## 依赖与约定
 
-- **依赖 skill/agent**：`/devops-discuss`（阶段1）、`arch-analyzer`（架构文档）、`analyst`/`architect`/`planner`/`executor`/`code-reviewer`/`verifier`（OMC agents）、`team`（并行编码）、`ralph`（汇总设计）
+- **依赖 skill/agent**：`/devops-discuss`（阶段1）、`php-analyzer`（架构文档）、`analyst`/`architect`/`planner`/`executor`/`code-reviewer`/`verifier`（OMC agents）、`team`（并行编码）、`ralph`（汇总设计）
 - **测试/校验**：验收基线 = `vendor/bin/phpunit modules/{模块}/tests` 单测绿 + 改动文件 `php -l` 语法校验。phpstan 默认不纳入验收（存量项目历史告警多、收益低），项目有干净基线时再可选开启。具体命令按项目配置
 - **单仓库单分支**：所有模块共用一条 feature 分支，diff 用 `git diff <默认分支>...HEAD -- modules/{模块}` 按目录隔离；**无独立分支/PR**
 - **架构规则**：遵守项目 `CLAUDE.md` 与 `.claude/rules/` 的架构与编码规范
