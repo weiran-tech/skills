@@ -1,8 +1,8 @@
-# /workflow summary：交付对接清单
+# /php-workflow summary：交付对接清单
 
-> 处理 `/workflow summary` 时读本文件。用途：里程碑做完后产出一份**对接清单**，给 DBA（DDL SQL）和前端（API）、运维（新增队列）看。受众不关心代码实现、类名、方法、文件位置，只关心「要改什么表、有哪些新接口、要加什么队列」。
+> 处理 `/php-workflow summary` 时读本文件。用途：里程碑做完后产出一份**对接清单**，给 DBA（DDL SQL）和前端（API）、运维（新增队列）看。受众不关心代码实现、类名、方法、文件位置，只关心「要改什么表、有哪些新接口、要加什么队列」。
 
-## `/workflow summary [需求ID][#里程碑]`
+## `/php-workflow summary [需求ID][#里程碑]`
 
 1. 解析作用目标（省略=活动上下文；多里程碑按选中里程碑汇总）。建议在阶段 5 收尾验收**通过后**执行，确保汇总的是已验收的最终状态
 2. 起一个 `writer` / `document-specialist`（只读）读取本里程碑产物 + 定向 grep，合成 `change-manifest.md`

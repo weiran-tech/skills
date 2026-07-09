@@ -1,8 +1,8 @@
 # Workflow — PHP 单体多模块需求开发全流程编排
 
-状态机驱动的开发流程 skill。把"需求讨论 → 分析设计 → 开发 → 审查 → 验收"串成一个统一入口，用 `progress.md` 记录状态，每次 `/workflow next` 自动决定下一步调度哪个 agent、传什么参数。
+状态机驱动的开发流程 skill。把"需求讨论 → 分析设计 → 开发 → 审查 → 验收"串成一个统一入口，用 `progress.md` 记录状态，每次 `/php-workflow next` 自动决定下一步调度哪个 agent、传什么参数。
 
-面向伪多模块单体项目：代码都在同一仓库 `modules/{模块}` 下，跨模块走 Events/Listeners + Service，审查按模块路径过滤 diff，架构上下文取自 `docs/workflow/{module}/`（php-analyzer 产出）。测试/校验等具体命令默认按 PHP 工具链（phpunit / php -l），可按项目配置替换。
+面向伪多模块单体项目：代码都在同一仓库 `modules/{模块}` 下，跨模块走 Events/Listeners + Service，审查按模块路径过滤 diff，架构上下文取自 `docs/php-workflow/{module}/`（php-analyzer 产出）。测试/校验等具体命令默认按 PHP 工具链（phpunit / php -l），可按项目配置替换。
 
 ---
 
@@ -22,34 +22,34 @@
 ## 五阶段 + 四人工门 主流程
 
 ```
-  阶段1 需求讨论        /workflow start  → /devops-discuss 多轮对话
+  阶段1 需求讨论        /php-workflow start  → /devops-discuss 多轮对话
      │ (产出 docs/discuss/{需求ID}.md)
      ▼
-  阶段2 分析与设计      /workflow next   → analyst 逐模块分析 + ralph 汇总设计
+  阶段2 分析与设计      /php-workflow next   → analyst 逐模块分析 + ralph 汇总设计
      │ (产出 analysis/、design-consensus.md[必含清单]、dev-tasks.md)
      ▼
  ┌──────────────────────────────────────────┐
  │ 阶段3 设计审核门  ★人工★  PENDING_DESIGN_REVIEW │  ← 清单式审核，缺项打回阶段2
- │   /workflow approve                        │
+ │   /php-workflow approve                        │
  └──────────────────────────────────────────┘
      ▼
-  阶段4 开发与逐任务审查  /workflow next  （见下方"任务级闭环"）
+  阶段4 开发与逐任务审查  /php-workflow next  （见下方"任务级闭环"）
      │
      ▼
-  阶段5 收尾验收        /workflow next   → verifier 全量回归 + 一致性把关（只读，不改代码）
+  阶段5 收尾验收        /php-workflow next   → verifier 全量回归 + 一致性把关（只读，不改代码）
      │ (产出 acceptance/acceptance.md 问题清单)
      ├─ 通过（无问题）→ COMPLETED
      ▼ 有问题
  ┌──────────────────────────────────────────┐
  │ 阶段5 验收确认门 ★人工★ PENDING_ACCEPT_REVIEW │  ← 逐条裁决 ACCEPTED/REJECTED/MODIFIED
- │   /workflow approve                        │
+ │   /php-workflow approve                        │
  └──────────────────────────────────────────┘
      ▼
   ACCEPT_FIXING → executor 修复已采纳项 → 重跑收尾验收
      ▼
-  COMPLETED ──→ /workflow summary  → 交付清单 change-manifest.md（DDL / Job·MQ / API，给 DBA 与前端）
+  COMPLETED ──→ /php-workflow summary  → 交付清单 change-manifest.md（DDL / Job·MQ / API，给 DBA 与前端）
 
-  ※ 阶段4/5 若发现设计/需求层缺陷 → /workflow rework 回退重做
+  ※ 阶段4/5 若发现设计/需求层缺陷 → /php-workflow rework 回退重做
 ```
 
 ---
@@ -64,7 +64,7 @@ TODO
           ▼ PLANNING                                    │
        ┌────────────────────────────────────────┐      │
        │ plan 人工门 ★人工★ PENDING_PLAN_REVIEW      │      │
-       │   /workflow approve                      │      │
+       │   /php-workflow approve                      │      │
        └────────────────────────────────────────┘      │
           ▼ PLAN_CONFIRMED                              │
  ┌───────────────────────────────────────────────────┘
@@ -75,7 +75,7 @@ TODO
  ▼ CR_SCANNED
        ┌────────────────────────────────────────┐
        │ CR 问题人工门 ★人工★ PENDING_CR_REVIEW      │  ← 逐条裁决 ACCEPTED/REJECTED/MODIFIED
-       │   /workflow approve                      │
+       │   /php-workflow approve                      │
        └────────────────────────────────────────┘
  ▼ CR_CONFIRMED
  │ ⑤ 改写 (executor，只改已采纳项)
@@ -92,7 +92,7 @@ TODO
 ## 里程碑（默认单里程碑）
 
 - **默认**：一个需求 = 一个里程碑，整套 5 阶段直接在需求层跑，无需关心里程碑。
-- **大需求**：用 `/workflow split` 按交付切片拆成多个里程碑（如按渠道/子系统/上线批次拆分）。拆分后每个里程碑独立跑阶段 2→5，公共设计骨架（`design-foundation.md`）须先于各里程碑定稿；用 `#里程碑` 选择符分别推进。
+- **大需求**：用 `/php-workflow split` 按交付切片拆成多个里程碑（如按渠道/子系统/上线批次拆分）。拆分后每个里程碑独立跑阶段 2→5，公共设计骨架（`design-foundation.md`）须先于各里程碑定稿；用 `#里程碑` 选择符分别推进。
 
 ---
 
@@ -116,20 +116,20 @@ TODO
 
 | 命令 | 作用 |
 |------|------|
-| `/workflow use [需求ID][#里程碑]` | **设定活动上下文（粘性）**，之后裸命令默认作用于它 |
-| `/workflow start {需求名}` | 创建需求，进入阶段1讨论（自动设为活动）|
-| `/workflow next [需求ID][#里程碑]` | 推进到下一阶段 / 下一个任务（省略=活动上下文）|
-| `/workflow approve [需求ID][#里程碑]` | 确认当前人工门（设计审核 / plan / CR 裁决 / 验收问题裁决，按状态自动分发）|
-| `/workflow status [需求ID][#里程碑]` | 查看进度（省略=活动上下文+高亮；无活动则全部）|
-| `/workflow list` | 列出未完成的需求 |
-| `/workflow split [需求ID] {里程碑列表}` | 大需求拆里程碑 |
-| `/workflow followup {已完成需求ID} [新需求名]` | 基于已完成需求发起新需求（继承设计上下文） |
-| `/workflow rework [需求ID][#里程碑]` | 设计/实现缺陷返工 |
-| `/workflow summary [需求ID][#里程碑]` | 产出交付清单（DDL / Job·MQ / API）给 DBA 与前端，验收通过后执行 |
+| `/php-workflow use [需求ID][#里程碑]` | **设定活动上下文（粘性）**，之后裸命令默认作用于它 |
+| `/php-workflow start {需求名}` | 创建需求，进入阶段1讨论（自动设为活动）|
+| `/php-workflow next [需求ID][#里程碑]` | 推进到下一阶段 / 下一个任务（省略=活动上下文）|
+| `/php-workflow approve [需求ID][#里程碑]` | 确认当前人工门（设计审核 / plan / CR 裁决 / 验收问题裁决，按状态自动分发）|
+| `/php-workflow status [需求ID][#里程碑]` | 查看进度（省略=活动上下文+高亮；无活动则全部）|
+| `/php-workflow list` | 列出未完成的需求 |
+| `/php-workflow split [需求ID] {里程碑列表}` | 大需求拆里程碑 |
+| `/php-workflow followup {已完成需求ID} [新需求名]` | 基于已完成需求发起新需求（继承设计上下文） |
+| `/php-workflow rework [需求ID][#里程碑]` | 设计/实现缺陷返工 |
+| `/php-workflow summary [需求ID][#里程碑]` | 产出交付清单（DDL / Job·MQ / API）给 DBA 与前端，验收通过后执行 |
 
 - **需求 ID** = `{YYYY-MM-DD}-{域}-{需求名}`（如 `2026-09-12-order-订单取消优化`），与 `docs/discuss/` 目录一致
 - **`#里程碑`** 仅多里程碑需求需要（如 `2026-09-12-payment-支付渠道重构#alipay`）
-- **活动上下文（推荐）**：`/workflow use` 选一次当前在搞的需求/里程碑（存于 `docs/discuss/.workflow-active`），之后 `next/approve/status/rework` 省略参数即默认指向它，不必每步重复敲长 ID
+- **活动上下文（推荐）**：`/php-workflow use` 选一次当前在搞的需求/里程碑（存于 `docs/discuss/.workflow-active`），之后 `next/approve/status/rework` 省略参数即默认指向它，不必每步重复敲长 ID
 - 模糊匹配：`use` / 显式传参支持前缀子串（如 `trade#共` → `trade…#共享基础`），唯一即定位
 - 省略且无活动上下文时：唯一进行中的自动选中，多个则列出让你选；显式传 ID 可临时操作别的需求而不改活动指针
 
@@ -141,33 +141,33 @@ TODO
 
 ```bash
 # 1. 起需求，进入讨论（devops-discuss 多轮对话厘清目标/影响）
-/workflow start 订单取消优化
+/php-workflow start 订单取消优化
 #   → 询问业务域=order，多轮讨论，产出 docs/discuss/2026-09-12-order-订单取消优化/discussion.md
 
 # 2. 分析与设计（analyst 逐模块分析 + ralph 汇总出 design-consensus + dev-tasks）
-/workflow next
+/php-workflow next
 #   → 状态停在 PENDING_DESIGN_REVIEW，给出设计审核清单自查结论
 
 # 3. 设计审核门（你逐项核对 design-consensus 必含清单）
-/workflow approve
+/php-workflow approve
 #   → design-consensus 标 APPROVED，进入开发
 
 # 4. 开发：逐任务闭环（简单任务直接编码→CR 扫描→停在 CR 门）
-/workflow next
+/php-workflow next
 #   → 任务1 编码完成、CR 扫出 3 个问题，停在 PENDING_CR_REVIEW，呈现问题清单
 
 #    你裁决：#1 ACCEPTED、#2 REJECTED(理由)、#3 MODIFIED(说明)
-/workflow approve
+/php-workflow approve
 #   → 只改 #1/#3，复验绿，任务1 置 DONE，回写 progress.md + dev-tasks.md
 
-/workflow next       # 推进任务2…… 直到全部 DONE
+/php-workflow next       # 推进任务2…… 直到全部 DONE
 
 # 5. 收尾验收（verifier 全量 phpunit + php -l + 跨模块一致性；phpstan 默认不卡）
-/workflow next
+/php-workflow next
 #   → 通过则 COMPLETED
 #   → 有问题则停在 PENDING_ACCEPT_REVIEW，呈现问题清单
 #    你裁决：#1 ACCEPTED、#2 REJECTED(理由)
-/workflow approve
+/php-workflow approve
 #   → 只修已采纳项，修复后重跑验收
 ```
 
@@ -175,24 +175,24 @@ TODO
 
 ```bash
 # 需求已讨论完，按交付切片拆里程碑
-/workflow split payment/支付渠道重构 alipay,wechat
+/php-workflow split payment/支付渠道重构 alipay,wechat
 #   → 确认 alipay/wechat 划分 + 抽出 design-foundation.md（公共骨架，先定稿）
 
 # 选一次活动上下文，之后裸命令默认作用于它（不必每步敲长 ID）
-/workflow use payment/支付渠道重构#alipay     # 也可模糊：use payment#alipay
+/php-workflow use payment/支付渠道重构#alipay     # 也可模糊：use payment#alipay
 
-/workflow next        # 阶段2 分析设计 → PENDING_DESIGN_REVIEW
-/workflow approve     # 设计审核通过
+/php-workflow next        # 阶段2 分析设计 → PENDING_DESIGN_REVIEW
+/php-workflow approve     # 设计审核通过
 
-/workflow next        # 阶段4：某任务判为【复杂】→ architect 出 plan，停在 PENDING_PLAN_REVIEW
-/workflow approve     # plan 确认 → 编码 → CR 扫描 → PENDING_CR_REVIEW …
+/php-workflow next        # 阶段4：某任务判为【复杂】→ architect 出 plan，停在 PENDING_PLAN_REVIEW
+/php-workflow approve     # plan 确认 → 编码 → CR 扫描 → PENDING_CR_REVIEW …
 
 # 切到另一个里程碑：只敲 #
-/workflow use #wechat
-/workflow next
+/php-workflow use #wechat
+/php-workflow next
 
 # 看进度（省略=活动上下文高亮；status 全局进度表）
-/workflow status
+/php-workflow status
 #   ▶ 活动: payment/支付渠道重构#wechat
 #   里程碑 alipay     阶段 4/5 — 开发（进行中）  任务 2/6
 #   里程碑 wechat ◀   阶段 3/5 — 设计审核（待审核）任务 0/9
@@ -202,17 +202,17 @@ TODO
 
 ```bash
 # 订单取消优化已 COMPLETED，现在要基于它做"取消原因统计"
-/workflow followup 2026-09-12-order-订单取消优化 取消原因统计
+/php-workflow followup 2026-09-12-order-订单取消优化 取消原因统计
 #   → 自动继承父需求设计文档到 docs/parent/
 #   → 进入阶段 1 讨论，聚焦增量变更
-#   → 讨论完成后 /workflow next 走标准 5 阶段流程
+#   → 讨论完成后 /php-workflow next 走标准 5 阶段流程
 ```
 
 ### 示例四：收尾验收发现设计错 → rework
 
 ```bash
 # 阶段5 验收时发现 design-consensus 的方案有缺陷，多个已 DONE 任务受影响
-/workflow rework 2026-07-09-payment-支付渠道重构#alipay
+/php-workflow rework 2026-07-09-payment-支付渠道重构#alipay
 #   → 确认根因层级 = 设计级
 #   → design-consensus 标 "## 返工修订 R1"，里程碑退回阶段2
 #   → 自动算出依赖该设计的下游任务，列给你确认（可增删）
@@ -220,9 +220,9 @@ TODO
 #   → progress.md 追加返工记录 R1
 
 # 修订设计 → 重审 → 受影响任务级联重跑
-/workflow next 2026-07-09-payment-支付渠道重构#alipay     # 阶段2 修订 design-consensus
-/workflow approve 2026-07-09-payment-支付渠道重构#alipay  # 阶段3 重审通过
-/workflow next 2026-07-09-payment-支付渠道重构#alipay     # 复杂任务重出 plan → 重 code → 重 CR
+/php-workflow next 2026-07-09-payment-支付渠道重构#alipay     # 阶段2 修订 design-consensus
+/php-workflow approve 2026-07-09-payment-支付渠道重构#alipay  # 阶段3 重审通过
+/php-workflow next 2026-07-09-payment-支付渠道重构#alipay     # 复杂任务重出 plan → 重 code → 重 CR
 ```
 
 ---
@@ -246,7 +246,7 @@ docs/discuss/
     rework/                      # 返工单（缺陷返工时才有）
     acceptance/                  # 阶段5 验收报告目录
       acceptance.md              # 收尾验收报告
-    change-manifest.md           # /workflow summary 交付清单（DDL/Job·MQ/API，给 DBA 与前端）
+    change-manifest.md           # /php-workflow summary 交付清单（DDL/Job·MQ/API，给 DBA 与前端）
   # 多里程碑时，analysis/design-consensus/dev-tasks/plans/done/review/rework 下沉到
   # .task/milestones/{里程碑}/，design-foundation.md 留在 .task/ 根作公共骨架
 ```

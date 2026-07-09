@@ -51,6 +51,6 @@ ralph: "读取 docs/discuss/{需求ID}/.task/analysis/ 下全部分析文档，
 遵守项目 CLAUDE.md 与 .claude/rules/ 的架构与编码规范。"
 ```
 
-完成后更新 progress.md 为 PENDING_DESIGN_REVIEW，输出设计摘要，等待用户 `/workflow approve`（审核走阶段 3，见 stage-3-review.md）。
+完成后更新 progress.md 为 PENDING_DESIGN_REVIEW，输出设计摘要，等待用户 `/php-workflow approve`（审核走阶段 3，见 stage-3-review.md）。
 
 > **设计分两层**：design-consensus = 共识/契约层（小需求够用）；复杂任务的实现细节留给阶段 4 的任务级 plan/LLD。详见 stage-4-dev.md。

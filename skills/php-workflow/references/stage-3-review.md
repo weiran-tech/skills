@@ -1,6 +1,6 @@
 # 阶段 3：设计审核（PENDING_DESIGN_REVIEW）
 
-> 执行阶段 3 / 处理 `/workflow approve` 的设计审核分支前读本文件。
+> 执行阶段 3 / 处理 `/php-workflow approve` 的设计审核分支前读本文件。
 
 **清单式人工审核门，不是橡皮图章。** approve 前必须逐项核对 design-consensus 的必含清单，任一项缺失/过浅 → 打回阶段 2 补充，不得 approve。
 
@@ -24,9 +24,9 @@
 未决项: {N 条，处置摘要}
 复杂任务: {列出将在阶段 4 出 plan 的任务}
 
-操作: 逐项核对后执行 /workflow approve；若有缺项，先让其补充再审
+操作: 逐项核对后执行 /php-workflow approve；若有缺项，先让其补充再审
 ```
 
-**⚠️ 只有用户显式输入 `/workflow approve` 才算审批通过。** 用户对设计的讨论、补充要求、确认某个细节正确、甚至说"没问题"，都不等于 approve。收到非 approve 消息时，视为反馈并据此调整设计，然后继续等待 `/workflow approve`。
+**⚠️ 只有用户显式输入 `/php-workflow approve` 才算审批通过。** 用户对设计的讨论、补充要求、确认某个细节正确、甚至说"没问题"，都不等于 approve。收到非 approve 消息时，视为反馈并据此调整设计，然后继续等待 `/php-workflow approve`。
 
-**approve 通过后**：在 design-consensus.md 末尾追加 `## 设计确认: APPROVED`，状态置 DEVELOPING，提示用户 `/workflow next` 进入阶段 4（见 stage-4-dev.md）。
+**approve 通过后**：在 design-consensus.md 末尾追加 `## 设计确认: APPROVED`，状态置 DEVELOPING，提示用户 `/php-workflow next` 进入阶段 4（见 stage-4-dev.md）。
