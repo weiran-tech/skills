@@ -1,5 +1,5 @@
 ---
-name: lc-kr36-ui-guide
+name: fe-kr36-ui-guide
 description: kr36-ui 组件库 API 参考指南。kr36-ui 是对 TDesign Vue Next 的深度封装组件库，用于氪金兽（Kejinshou）系列项目。当涉及 kr36-ui 组件使用、KrForm schema 配置、KrTable 列定义、KrDialog 弹窗、KrCard 布局等场景时，必须加载此技能获取准确的 Props/Slots/Events 文档。适用于所有使用 kr36-ui 的项目（backend-kejinshou、h5-nuxt、kejinshou_m 等）。当你在写 Vue 页面并使用 Kr* 前缀组件、配置 KrForm schema、渲染 KrTable columns 时，都应该参考此技能。
 ---
 
@@ -7,7 +7,7 @@ description: kr36-ui 组件库 API 参考指南。kr36-ui 是对 TDesign Vue Nex
 
 kr36-ui 是对 TDesign Vue Next v1.9 的深度封装组件库，为氪金兽（Kejinshou）系列项目提供统一的 UI 组件。所有组件均以 `Kr` 前缀命名，底层透传 TDesign 属性，同时收窄 API 以保持项目一致性。
 
-**源码位置：** `/Users/gaochunfa/project/project_develop/kr36-ui`
+**源码位置：** 本机开发目录通常为 `~/project/project_develop/kr36-ui`；若该路径不存在，可查看当前项目 `node_modules/kr36-ui` 中的类型声明，或询问用户源码位置。
 
 ---
 
