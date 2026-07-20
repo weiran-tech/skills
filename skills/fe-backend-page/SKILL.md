@@ -1,13 +1,15 @@
 ---
-name: lc-kejinshou-page
-description: 生成 backend-kejinshou 项目标准页面（包含搜索、表格列表、表单弹窗提交）。当用户想要新建或重构一个包含增删改查、列表页或管理页面的 Vue 页面时使用。遇到用户描述"新建一个页面"、"增加管理功能"、"做一个列表页"、"加一个增删改查"时，必须使用此技能。
+name: fe-backend-page
+description: 生成后台管理项目（Vue3 + TDesign + kr36-ui 技术栈）的标准页面（包含搜索、表格列表、表单弹窗提交）。当用户想要新建或重构一个包含增删改查、列表页或管理页面的 Vue 页面时使用。遇到用户描述"新建一个页面"、"增加管理功能"、"做一个列表页"、"加一个增删改查"时，必须使用此技能。
 ---
 
-# backend-kejinshou 标准页面生成规范
+# 后台管理项目标准页面生成规范
 
-生成 `backend-kejinshou` 项目的页面时，必须严格遵循以下规范。该项目使用 Vue 3 + TypeScript + TDesign + kr36-ui 封装组件。
+生成基于 Vue 3 + TypeScript + TDesign + kr36-ui 封装组件的后台管理项目页面时，必须严格遵循以下规范。适用于所有采用该技术栈的后台项目（如 backend-kejinshou 等）。
 
-> **依赖技能：** 组件库 API 详情请参考 `lc-kr36-ui-guide` 技能。该技能包含 KrCard、KrForm、KrTable、KrDialog、KrButton 等所有 kr36-ui 组件的完整 Props/Slots/Events 文档和 KrForm schema 示例。
+> **依赖技能：** 组件库 API 详情请参考 `fe-kr36-ui-guide` 技能。该技能包含 KrCard、KrForm、KrTable、KrDialog、KrButton 等所有 kr36-ui 组件的完整 Props/Slots/Events 文档和 KrForm schema 示例。
+
+> **项目特有约定：** 本技能只约定**页面结构与组件用法**这一通用层。各项目特有的部分——**权限对接**（权限接口地址、命名规则、注册流程）、**接口获取方式**（如 Apifox MCP）等——以目标项目根目录 `CLAUDE.md` 中的约定为准。目标项目的 `CLAUDE.md` 会自动加载进上下文，直接取其中参数即可，无需额外 Read。
 
 ## 1. 整体结构规范
 
@@ -22,15 +24,25 @@ description: 生成 backend-kejinshou 项目标准页面（包含搜索、表格
 ```vue
 <KrCard title="页面标题">
     <template #actions>
-        <KrButton v-isAuth="['kjs_backend.xxx.add']" @click="handleAdd('add', {})">新增</KrButton>
+        <KrButton v-isAuth="['<权限key>']" @click="handleAdd('add', {})">新增</KrButton>
     </template>
     <!-- 内容 -->
 </KrCard>
 ```
 
-**搜索表单**
+> 权限 key 的具体取值、命名规则与注册流程，见目标项目 `CLAUDE.md` 的「权限对接」约定。
+
+**搜索表单**（当搜索表单前面有 KrTabs 等组件时，需加 `class="table-wrapper"` 保持 8px 间距）
 ```vue
+<!-- 无 Tabs 时 -->
 <KrForm :layout="'inline'" :schema="searchSchema" :submit="submitSearch" :reset="resetSearch">
+    <KrButton type="submit">搜索</KrButton>
+    <KrButton theme="default" variant="base" type="reset">重置</KrButton>
+</KrForm>
+
+<!-- 有 Tabs 时，KrForm 需加 class="table-wrapper" -->
+<KrTabs type="filter" :active="games.active" :list="games.list" @change="gameChange" />
+<KrForm class="table-wrapper" :layout="'inline'" :schema="searchSchema" :submit="submitSearch" :reset="resetSearch">
     <KrButton type="submit">搜索</KrButton>
     <KrButton theme="default" variant="base" type="reset">重置</KrButton>
 </KrForm>
@@ -82,7 +94,7 @@ description: 生成 backend-kejinshou 项目标准页面（包含搜索、表格
     <KrCard title="页面标题">
         <!-- 操作栏 -->
         <template #actions>
-            <KrButton v-isAuth="['kjs_backend.example.add']" @click="handleAdd('add', {})">新增</KrButton>
+            <KrButton v-isAuth="['<权限key>']" @click="handleAdd('add', {})">新增</KrButton>
         </template>
 
         <!-- 搜索表单 -->
@@ -212,9 +224,9 @@ const columns = [
         align: 'center',
         fixed: 'right',
         cell: (h, { row }) => {
-            // JSX 中用 isPermission 判断权限
-            const hasEdit = isPermission(Perms.KjsBackendExampleEdit);
-            const hasDel = isPermission(Perms.KjsBackendExampleDelete);
+            // JSX 中用 isPermission 判断权限（权限常量约定见项目 CLAUDE.md）
+            const hasEdit = isPermission(Perms.XxxEdit);
+            const hasDel = isPermission(Perms.XxxDelete);
             return (
                 <div>
                     {hasEdit && (
@@ -361,10 +373,31 @@ onMounted(() => {
 
 ## 4. 常用列渲染模式
 
+> 注：下面枚举映射里的 `|| '-'` 是「字典查不到时的兜底」，与第 9 节「禁止在 `get()` 默认值后再叠加 `|| '--'`」不冲突——后者针对的是 `get(obj, 'x', 默认值) || '--'` 这种重复兜底。
+
 ```js
 // 枚举值映射（先定义字典再用）
 const TYPE_MAP = { 1: '正常', 2: '异常', 3: '未知' };
 { colKey: 'type', title: '类型', cell: (h, { row }) => TYPE_MAP[row.type] || '-' }
+
+// 状态内联开关：列表里直接 switch 切换，调用 update_status 接口，成功后刷新
+{
+    colKey: 'status',
+    title: '状态',
+    align: 'center',
+    cell: (h, { row }) => {
+        const status = get(row, 'status', 0);
+        const canEdit = isPermission(Perms.XxxUpdateStatus); // 无权则禁用开关
+        return (
+            <t-switch value={status === 1} disabled={!canEdit} onChange={(val) => handleStatusChange(row, val)} />
+        );
+    },
+}
+// const handleStatusChange = async (row, val) => {
+//     const { success, message } = await reqXxxUpdateStatus({ id: get(row, 'id'), status: val ? 1 : 0 });
+//     if (success) await fetchData();
+//     toast(message, success);
+// };
 
 // 金额（分转元）
 { colKey: 'amount', title: '金额', cell: (h, { row }) => `¥${(get(row, 'amount', 0) / 100).toFixed(2)}` }
@@ -423,6 +456,8 @@ export async function reqXxxDetail(data: { id: number | string }) {
 }
 ```
 
+> 接口定义（URL、入参、出参）来源因项目而异（如 Apifox MCP），以目标项目 `CLAUDE.md` 的约定为准。
+
 ## 6. 路由配置规范
 
 路由文件放在 `src/router/modules/<模块名>.ts`，路由通过 `import.meta.glob('./modules/**/!(homepage).ts', { eager: true })` 自动发现，无需手动注册。
@@ -446,7 +481,7 @@ export default [
                 component: () => import('@/pages/xxx/xxxList.vue'),
                 meta: {
                     title: 'XXX列表',
-                    permissions: Perms.KjsBackendXxxPage, // 若用户提供了对应权限枚举则使用，否则用 'view_page' 兜底
+                    permissions: Perms.XxxPage, // 若有对应权限枚举则使用，否则用 'view_page' 兜底
                 },
             },
         ],
@@ -454,62 +489,54 @@ export default [
 ];
 ```
 
-## 7. 权限对接规范
+## 7. 权限对接规范（严禁自行编造权限）
 
-### 7.1 权限使用方式
-- **模板中按钮**：用 `v-isAuth="['kjs_backend.xxx.add']"` 指令（字符串数组）
-- **JSX/JS 中判断**：用 `isPermission(Perms.KjsBackendXxxEdit)` 函数
-- **路由权限**：在 router meta.permissions 里引用 Perms 枚举
-- 权限 key 格式为 `kjs_backend.<模块>.<子模块>.<操作>`，如 `kjs_backend.support.contract_shunt_config.add`
+**核心原则：只对接后端已注册的权限，严禁新增不存在的权限。页面对应权限若后端未注册，路由用 `Perms.PAGE_VIEW`（`'view_page'`）兜底。**
 
-### 7.2 权限自动检测与添加（严禁自行编造权限）
+> **项目级参数在目标项目 `CLAUDE.md` 中配置**：权限接口请求地址、本地快照路径、`Perms` 常量前缀与权限 key 前缀。这些参数随项目 `CLAUDE.md` 自动进上下文，直接取用即可。
 
-**核心原则：只添加后端已注册的权限，严禁自行新增不存在的权限。新增页面若后端未注册对应权限，一律使用 `Perms.PAGE_VIEW` 兜底。**
+### 7.1 页面层使用方式
+- **模板按钮**：`v-isAuth` 接受两种**等价**写法，皆可——
+  - 字符串：`v-isAuth="['kjs_backend.xxx.add']"`（项目现存以此为主）
+  - 常量：`v-isAuth="[Perms.XxxAdd]"`（更利于重构与追踪）
+- **JSX/JS 判断**：`isPermission(Perms.XxxEdit)`（从 `@/utils/utils` 引入）
+- **路由权限**：router `meta.permissions` 引用 `Perms` 枚举
 
-**以下步骤必须自动执行，不能跳过。每次涉及权限对接时，必须按顺序走完全部步骤。**
+### 7.2 自动检测与添加（按序执行，不可跳过）
 
-**检测步骤：**
-
-1. **请求接口获取后端最新权限**（必须执行）
+1. **拉取后端最新权限**（请求地址见项目 `CLAUDE.md`）
    ```bash
-   curl -s https://test-backend.kejinshou.com/__core/permissions -o /tmp/permissions_latest.json
+   curl -s <项目配置的权限接口地址> -o /tmp/permissions_latest.json
    ```
    返回格式：`{ status: 0, data: [{ url, permission, name }] }`
 
-2. **与本地 `permissionsCur.json` 对比，找出新增权限**（必须执行）
-    - 读取本地旧快照 `src/services/permissionsCur.json` 中的 `data` 数组，提取所有 `permission` 值形成旧集合
-    - 读取步骤 1 获取的最新数据中的 `data` 数组，提取所有 `permission` 值形成新集合
-    - 对比两个集合，找出**新集合中有、旧集合中没有**的权限（即 `newOnly`）
-    - 输出新增权限列表（含 `url`、`permission`、`name`），特别标注与当前功能相关的权限
+2. **与本地快照对比，找出新增权限**
+   - 旧集合：项目快照（如 `src/services/permissionsCur.json`）的 `data[].permission`
+   - 新集合：步骤 1 数据的 `data[].permission`
+   - 求差集得 `newOnly`（新有旧无），输出 `url` / `permission` / `name`，标注与当前功能相关项
 
-3. **将新增权限补充到 `permissions.ts`**（有新增时执行）
-   仅追加 `newOnly` 中的权限到 `permissions.ts` 末尾（`};` 之前），格式：
-   ```typescript
-   // ✅ {name}：{url}
-   KjsBackendXxxYyy: '{permission}',
-   ```
-    - Key 生成规则：去掉 `kjs_backend.` 前缀 → 按 `.` 分割 → 每段首字母大写驼峰 → 拼接为 `KjsBackend{...}`
-    - 当前功能用到的标注 `// ✅`
-    - 未对接的标注 `//`（不加 ✅）
+3. **将新增权限追加到 `permissions.ts` 末尾**（`};` 之前，有新增时执行）
+   - Key 规则：去掉项目权限前缀 → 按 `.` 分段 → 每段转大驼峰（下划线也转驼峰）→ 拼项目 `Perms` 前缀
+   - **写入时不加 ✅**，统一格式：
+     ```typescript
+     // {name}：{url}
+     XxxYyy: '{permission}',
+     ```
 
-4. **覆盖更新本地权限快照**（必须执行）
-   将步骤 1 获取的最新数据覆盖写入本地快照：
+4. **覆盖更新本地快照**
    ```bash
-   cp /tmp/permissions_latest.json src/services/permissionsCur.json
+   cp /tmp/permissions_latest.json <项目快照路径>
    ```
 
-5. **在页面代码中对接权限**（必须执行）
-    - 编辑/删除按钮加 `v-isAuth="[Perms.KjsBackendXxxSave]"` 或在 JSX 中用 `isPermission(Perms.KjsBackendXxxSave)`
-    - 路由 meta.permissions 引用对应 Perms 枚举
-    - 如果新增权限列表中**不包含**当前页面对应的权限 → **使用 `Perms.PAGE_VIEW` 兜底，严禁自行编造权限常量**
+5. **页面对接权限后回标 ✅**
+   - 按钮 `v-isAuth` / JSX `isPermission` / 路由 `meta.permissions` 引用对应 `Perms`
+   - 页面权限若不在 `newOnly` 中 → 用 `Perms.PAGE_VIEW` 兜底，严禁编造
+   - 对接后用 Grep 搜索 `Perms.Xxx` 在 `.vue`/`.ts` 的真实引用（排除 `permissions.ts` 自身）；只有被 `v-isAuth` / `isPermission()` / `meta.permissions` 引用的，才把注释 `//` 改为 `// ✅`。纯 Service 调用不算对接。
 
-### 7.3 权限格式约定
-```typescript
-// ✅ {接口描述}：{接口URL}
-KjsBackendXxxYyy: 'kjs_backend.xxx.yyy',
-```
-- `✅` 表示该权限已在页面/按钮中对接使用
-- 无 `✅` 表示权限已注册但尚未在前端使用
+### 7.3 ✅ 标记约定
+- `✅` 仅表示该常量已在页面 `v-isAuth` / JSX `isPermission()` / 路由 `meta.permissions` 中被引用
+- 无 `✅` 表示已注册但前端尚未使用
+- 严禁步骤 3 写入即标 ✅，必须步骤 5 对接并验证后才标
 
 ## 8. toast 使用说明
 
@@ -545,5 +572,8 @@ toast(message, success);   // success=true 显示成功，false 显示警告
 - 弹窗 close 时要清空 schema 和 rules，避免切换时残留旧数据
 - 删除操作必须使用 `DialogPlugin.confirm` 做二次确认
 - 搜索重置时要将 `pagination.current` 重置为 1
+- **异步加载的下拉 options 必须用 `reactive([])` 数组并保持同一引用**：当 `searchSchema` / 弹窗 schema 里的 `options` 来自接口异步加载（如游戏列表）时，用 `const opts = reactive([])`，schema 里写 `options: opts`，加载完成后 `opts.push(...list)`。**不要用 `ref([])`**——schema 里拿到的是未解包的 Ref 对象，Select 渲染不出选项
+- **分页查询有必填参数时，要设默认值且重置时保留**：若列表接口某入参为必填（如 `publishPlatform`），用一个 `DEFAULT_SEARCH` 常量承载默认值，`searchValue` 初始化与 `resetSearch` 都展开它，保证首次加载/重置/搜索三种路径都带上该参数
 - **搜索表单字段禁止手动设置 `style: { width: '...' }`**，让组件自适应宽度
 - **操作列按钮统一使用 `KrButton size="small" variant="text"`**，禁止使用 `t-link`
+- **组件间距规则**：当 KrForm 前面有 KrTabs 等兄弟组件时，KrForm 需加 `class="table-wrapper"` 保持 8px 间距；KrTable 同理。`table-wrapper` 样式统一用于相邻组件间 8px 上间距
