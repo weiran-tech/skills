@@ -5,8 +5,6 @@ compatibility: Python 3.8+, uv
 ---
 # Project Report Skill
 
-为单个项目生成独立的报告，支持多种数据源（云效故障、技术需求、Sentry 异常、SLS 接口统计）。
-
 ## 参数说明
 
 | 参数           | 类型   | 必填 | 默认值       | 说明                                                                                 |
