@@ -87,6 +87,20 @@ GitHub,观测数据现算。
 gh issue list --state open --json number,title,labels,comments,updatedAt
 ```
 
+**同时拉依赖关系**(GitHub 原生 issue 依赖,"blocked by"/"blocking"),
+一次 GraphQL 查全部 open issue 的前置依赖,不要逐个 issue 单查:
+
+```bash
+gh api graphql -f query='query($o:String!,$r:String!){repository(owner:$o,name:$r){
+  issues(first:100,states:OPEN){nodes{number
+    blockedBy(first:20){nodes{number state repository{nameWithOwner}}}}}}}' \
+  -f o=<owner> -f r=<repo> \
+  --jq '.data.repository.issues.nodes[]|select(.blockedBy.nodes|length>0)'
+```
+
+(`<owner>`/`<repo>` 取自 `gh repo view --json nameWithOwner`。open issue 超过
+100 条时要翻页。)
+
 对每个 issue,同时看它的标签集合(是否已有分类标签、是否有
 `priority:0`/`priority:1`/`priority:2` 优先级标签、是否有
 `claude:in-progress` 锁、是否有 `claude:wait-reply`)和最新一条评论
@@ -175,6 +189,26 @@ Agent 结束后摘掉 `claude:in-progress` 标签。
 当成"人类新回复",下一个 tick 就会对一个**正在被处理中**的 issue 再派一个
 Agent——虽然 `claude:in-progress` 锁会挡住(a 分支先判存活),但判断逻辑
 本身是错的,不能指望下游的锁来兜住上游的误判。
+
+**依赖关系:有未关闭的前置依赖,就不能开工。** 对候选里的
+`size:trivial`/`size:feature`,看 §1 拉到的 `blockedBy`:只要有**任意一个
+`state=OPEN` 的前置 issue**(不管它是正在处理、在排队,还是停在
+`claude:wait-reply` 等人 review/合并 PR——只有**真正关闭**才算解除),这个
+issue 本 tick **不启动**:
+
+- 从候选池里**剔除后再排序**——所以被挡住的高优先级 issue 不会占掉
+  "1 个"配额,轮到的是优先级最高的**未被阻塞**的那个
+- **不打锁、不发评论、不改标签**(每个 tick 都评论一次会刷屏);只在终端
+  打印一行 `#<N> 被 #<M> 阻塞,跳过`
+- 前置 issue 关闭后,下个 tick 自然解除;不需要额外状态
+- 若发现依赖成环(A 阻塞 B、B 阻塞 A),整个环都会被剔除——终端打印一行
+  警告,交给人去解环,不要自己删依赖关系
+- 只约束占 worktree 的 `size:*` 处理;`type:question`/`needs-clarification`
+  只是评论回复,不受依赖限制
+
+**前置 issue 要提前:** 排序时,一个 issue 的**有效优先级** = 它自己和所有
+(直接或间接)依赖它的 open issue 里最高的那个。否则 `priority:0` 的
+issue 会被一个 `priority:2` 的前置饿死。这只影响本 tick 的排序,**不改标签**。
 
 满足条件的 issue 里,**按优先级排序,单个 tick 只派发 1 个占 worktree 的
 处理 Agent**(`size:trivial`/`size:feature`)——`type:question`/
