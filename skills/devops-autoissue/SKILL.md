@@ -6,7 +6,7 @@ license: MIT
 compatibility: 需要本机已登录 gh CLI,且对目标仓库有 issues/PR 读写权限。分类标签与处理逻辑目前是 mono4ts 专用,非通用 schema-agnostic 实现(对比 devops-openspec-workflow)。
 metadata:
   author: project
-  version: "4.0"
+  version: "5.0"
 ---
 
 # DevOps AutoIssue(本地轮询)
@@ -40,15 +40,29 @@ metadata:
   §3.0),不是某次调用的返回值,派发方和被派发的 Agent 都能独立推算出同一
   个路径,不需要写进任何状态文件跨 tick 传递。
 
-**v4.0 补充一个纯观察性质的本地文件,不是锁**:`.omc/state/
-issue-poller-session.json`,只记 `{ "currentIssue": <N 或 null>,
-"startedAt": <时间戳或 null> }`,在派发本 tick 唯一的那个处理 Agent(见
-§2)前写入、Agent 结束后清空。**这个文件不参与任何"该不该处理某个 issue"
-的判断**——那个判断永远只看 GitHub 上的 `claude:in-progress` 标签,不看
-这个文件。加它纯粹是为了本会话自己的可观测性(比如中途崩溃后,下次能从
-这个文件看出上次卡在哪个 issue 上,不用去猜),v1.0 踩过的坑是把本地文件
-当成了跨会话的锁在用,这次不重蹈覆辙——它只回答"我(这个会话)现在在干
-什么",不回答"这个 issue 能不能动"。
+**v4.0 曾经加过一个"纯观察性质"的本地文件
+`.omc/state/issue-poller-session.json`(记"本会话当前在处理哪个 issue"),
+v5.0 已删除。** 删除理由有两层,第二层才是根本的:
+
+1. **实现就是错的**:它用的是一个**固定共享路径**,不是按会话隔离的。
+   两个会话同时跑时互相覆盖——A 写入自己在处理的 issue,B 紧接着覆盖成
+   自己的;更糟的是 A 处理完按约定"清空"这个文件时,会把 B 还在进行中的
+   记录一起抹掉。一个"用来诊断当前状态"的文件,恰恰在最需要它的多会话
+   场景下内容是错的。
+2. **它的全部用途已经被别的机制吸收干净了**(这才是不值得修的原因):
+   - "这个 Agent 还活着吗" → 由 issue 上的进度评论回答(§2a、§3.1),
+     而且是跨机器可见的,本地文件做不到
+   - "现在在处理什么" → 由每个 tick 的终端状态行回答(§1、§3.1),
+     数据源是 GitHub + git,不是本地记账
+
+  修它需要引入会话 ID(其实拿得到——OMC 已有 `.omc/state/sessions/
+  {sessionId}/` 约定,ID 就在会话自己的 scratchpad 路径里),但修好之后
+  它也不再承担任何独有职责,纯属多一个要维护的状态源。
+
+**沉淀下来的教训**:这个仓库的多会话现实下,**本地文件状态已经连续坑过
+两次**(v1.0 拿它当跨会话锁、v4.0 拿它当会话级记账)。除非天然按目录隔离
+(像 worktree 那样),否则不要再引入共享路径的本地文件——协调状态放
+GitHub,观测数据现算。
 
 ## 1. 拉取状态
 
@@ -59,19 +73,36 @@ gh issue list --state open --json number,title,labels,comments,updatedAt
 对每个 issue,同时看它的标签集合(是否已有分类标签、是否有
 `priority:0`/`priority:1`/`priority:2` 优先级标签、是否有
 `claude:in-progress` 锁、是否有 `claude:wait-reply`)和最新一条评论
-(内容、作者、是否带 `<!-- claude-local:responded -->` 标记)。
+(内容、作者、带的是我们哪种标记,见 §2c 的标记表)。
+
+**拉完之后,先在终端打印一遍在途工作的状态**(见 §3.1):对每个带
+`claude:in-progress` 的 issue 打印一行,内容是外部可观测的证据——最近
+一条进度评论多久以前、分支 `issue-<N>` 相对 main 有几个提交、worktree
+还在不在。这是你能给人的**唯一实时可见的状态**(被派发的 Agent 自己
+打印不到你的终端里),没有在途工作就跳过这一步,不要打印空表。
 
 ## 2. 对每个 open issue 分类处理
 
-**a) 已经有 `claude:in-progress` 标签 → 先判断是不是别人正在处理**
+**a) 已经有 `claude:in-progress` 标签 → 先判断对方是不是还活着**
 
-找最新一条带 `<!-- claude-lock:started:... -->` 标记的评论,读出时间戳:
-- 距今 **不到 60 分钟** → 大概率有别的会话/tick 正在处理,**跳过这个
-  issue,不要碰**,继续处理列表里的下一个
-- 距今 **超过 60 分钟** → 视为上次处理异常中断(进程被杀、崩溃等),
+**判据是"最近有没有活着的证据",不是"开始了多久"**——这两者的区别是
+真实的 bug:实测一次 `size:feature` 派发跑了 27.5 分钟,跑到 70 分钟
+完全可能,而单纯按"开始时间超过 60 分钟"判定就会把一个**正在正常干活**
+的 agent 的锁抢走,然后派第二个 agent 去动同一个分支。
+
+所以:找最新一条带 `<!-- claude-local:progress -->` **或**
+`<!-- claude-lock:started:... -->` 标记的评论(取两者里时间更晚的那条,
+进度评论就是为这个判断而存在的,见 §3.1),读出它的时间戳:
+
+- 距今 **不到 60 分钟** → 对方还活着(要么刚开工,要么最近报过进度),
+  **跳过这个 issue,不要碰**,继续处理列表里的下一个
+- 距今 **超过 60 分钟** → 视为异常中断(进程被杀、崩溃、机器睡眠等),
   执行 `gh issue edit <N> --remove-label "claude:in-progress"` 解锁,
-  在 issue 下留一条"检测到锁超时,自动恢复重试"的说明评论,然后按下面
-  b)/c) 正常流程重新判断这个 issue
+  在 issue 下留一条"检测到超过 60 分钟无进度上报,判定为异常中断,
+  自动恢复重试"的说明评论,然后按下面 b)/c) 正常流程重新判断这个 issue
+
+阈值取 60 分钟、而进度上报要求 30-60 分钟一次,是配套的:上报周期必须
+明显短于判死阈值,否则一个活着但刚好两次上报间隔拉长的 agent 会被误杀。
 
 **b) 没有分类标签(`size:trivial`/`size:feature`/`type:question`/
 `needs-clarification` 都没有)→ 分诊**
@@ -97,9 +128,19 @@ Agent 结束后摘掉 `claude:in-progress` 标签。
 
 **c) 已有分类标签,且需要新动作 → 处理**
 
-判断"是否需要新动作":最新一条评论**不**包含
-`<!-- claude-local:responded -->` 标记(说明是人类新发的,不是我们自己
-上一轮发的)。
+判断"是否需要新动作":最新一条评论**不带我们自己的任何标记**,才算人类
+新发的。我们自己的标记目前有三种,**判断时必须全部排除**:
+
+| 标记 | 谁发的 | 含义 |
+|---|---|---|
+| `<!-- claude-local:responded -->` | 处理/分诊 Agent 收尾时 | 这一轮已经回复过了 |
+| `<!-- claude-local:progress -->` | 处理 Agent 干活中途(§3.1) | 还在跑,这是进度汇报 |
+| `<!-- claude-lock:started:... -->` | 派发方打锁时 | 开工声明,带时间戳 |
+
+**漏掉 `progress` 这一条会出真问题**:进度评论是 Agent 自己发的,如果把它
+当成"人类新回复",下一个 tick 就会对一个**正在被处理中**的 issue 再派一个
+Agent——虽然 `claude:in-progress` 锁会挡住(a 分支先判存活),但判断逻辑
+本身是错的,不能指望下游的锁来兜住上游的误判。
 
 满足条件的 issue 里,**按优先级排序,单个 tick 只派发 1 个占 worktree 的
 处理 Agent**(`size:trivial`/`size:feature`)——`type:question`/
@@ -184,9 +225,6 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
    已摘掉)。
 3. 确认这是本 tick 按 §2c 排序选出的**唯一一个**占 worktree 的处理
    Agent——不要因为同时有好几个 issue 符合条件就都派发,每个 tick 只派 1 个。
-4. 写入 `.omc/state/issue-poller-session.json`:
-   `{ "currentIssue": <N>, "startedAt": "<now>" }`(见 §0,纯观察用,
-   不参与锁判断)。
 
 **prompt 必须明确写清楚这几点**(因为每次派发的都是全新 Agent,没有任何上一轮
 的记忆,唯二能依赖的持久化状态是 git 分支和 GitHub issue 评论串):
@@ -217,7 +255,24 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
 >    `node scripts/wt.mjs done issue-<N>` 清理自己的 worktree——所有需要
 >    跨轮次保留的东西都已经提交推送到分支 `issue-<N>` 上了,worktree 目录
 >    本身不需要留着(留着就是下一轮"目标已存在"报错的来源)。
-> 7. 全程不自动合并 PR。
+> 7. **每完成一个阶段性节点就看一眼表**(openspec 流水线每推进一层、
+>    或任何一个耗时步骤跑完,执行 `date -u +%Y-%m-%dT%H:%M:%SZ`)。距离
+>    你上一次进度上报(第一次则是距离开工)**超过 30 分钟**,就先发一条
+>    进度评论再继续干:
+>    ```
+>    gh issue comment <N> --body "$(cat <<'EOF'
+>    ⏳ 进度上报(处理中,未完成)
+>    - 当前阶段:<比如「openspec L5 实现中,已完成 shared/server,正在改 web」>
+>    - 已提交:<git log --oneline 的摘要,或「尚未提交」>
+>    - 预计下一步:<一句话>
+>
+>    <!-- claude-local:progress -->
+>    EOF
+>    )"
+>    ```
+>    **不要靠"感觉过了很久"来触发**——锚在阶段性节点上主动 `date`,
+>    埋头干活时是不会自己想起来看钟的。
+> 8. 全程不自动合并 PR。
 
 按标签(每条分支收尾时都要按上面"`claude:wait-reply` 标签"那节的判据,
 决定要不要重新打上这个标签):
@@ -243,11 +298,46 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
   清楚说明"代码/文档都在分支上了,PR 没自动合并,等人 review 后手动
   合并",**打上 `claude:wait-reply`**
 
-每条自动发出的评论,末尾都要加一行:
+每条**收尾性质**的评论(回答完问题、追问完信息、开完 PR、停在闸门),
+末尾都要加一行:
 
 ```
 <!-- claude-local:responded -->
 ```
+
+中途的进度评论用另一个标记(`<!-- claude-local:progress -->`),两者
+不能混用——见 §3.1。
+
+### 3.1 进度上报:为什么必须有,以及谁报给谁
+
+**动机不只是"让人安心"**,它修掉了一个真实的判定 bug:派发出去的 Agent
+在后台跑,外部无法观测它的内部状态,所以"它还活着吗"只能靠**它自己留下
+的痕迹**来判断。没有进度上报时,§2a 只能按"开工了多久"盲目计时,于是一个
+跑了 70 分钟但**完全正常**的 Agent 会被另一个 tick 判定成崩溃残留、锁被
+抢走、第二个 Agent 被派去动同一个分支。有了 30 分钟一次的进度评论,存活
+判断就有了证据:**最近有上报 = 活着**,与它已经跑了多久无关。
+
+**两个上报渠道,各自能到的地方不同**:
+
+| 渠道 | 谁发 | 到哪 | 能不能实时看到 |
+|---|---|---|---|
+| GitHub 进度评论 | 被派发的 Agent 自己(§3 prompt 第 7 点) | issue 评论区 | ✅ 能,这是唯一能实时到人眼前的渠道 |
+| 终端状态行 | 派发方(轮询循环)在每个 tick 里 | 你的终端 | ✅ 能,但只在 tick 醒来那一刻 |
+
+**被派发的 Agent 没法"打印"给你看**——它跑在后台,输出进的是自己的
+transcript 文件(派发方被明确禁止读那个文件,读了会撑爆上下文)。所以
+"打印状态"这件事**只能由派发方做**,而且派发方能说的只有**外部可观测的
+证据**,不是 Agent 的内心活动:
+
+每个 tick,对每个带 `claude:in-progress` 的 issue,在终端打印一行:
+
+```
+issue #<N> 处理中 · 最近上报 <M> 分钟前 · 分支 issue-<N> 已有 <K> 个提交 · worktree 在/已清理
+```
+
+这几项都能从外部拿到(`gh issue view` 读最新 progress 评论时间、
+`git log main..issue-<N> --oneline | wc -l`、`ls .worktrees/`),不需要
+也不应该去窥探 Agent 的 transcript。
 
 ## 4. Agent 完成后
 
@@ -256,9 +346,7 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
    issue,直到 60 分钟超时自动恢复——与其等超时,不如每次都确保摘干净。
    `claude:wait-reply` 打不打由 Agent 自己按 §3 的分支逻辑决定,这里不用
    管。
-2. **清空本地会话记录**:把 `.omc/state/issue-poller-session.json` 的
-   `currentIssue`/`startedAt` 都改回 `null`(见 §0)。
-3. **核实 worktree 确实清理了**:处理 Agent 的 prompt(§3.0 第 6 点)要求
+2. **核实 worktree 确实清理了**:处理 Agent 的 prompt(§3 第 6 点)要求
    它自己在收尾前跑 `node scripts/wt.mjs done issue-<N>`,派发方这一步只需
    要核实结果——`node scripts/wt.mjs list` 或直接 `ls .worktrees/` 确认
    `issue-<N>` 已经不在了。
