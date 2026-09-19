@@ -1,12 +1,12 @@
 ---
 name: devops-autoissue
-description: 本地轮询处理 GitHub issue(分诊 + 评论驱动推进,多 issue 并行、git worktree 隔离,支持多个会话/机器同时跑而不冲突)。用户说 "devops-autoissue"、"跑一下 issue 轮询"、"处理一下 issue"、"issue poller" 时触发。当前实现里的分类标签(size:trivial/size:feature/type:question/needs-clarification)、`pnpm test:changed`、`/devops-openspec-workflow` 调用是针对 mono4ts 仓库写的,搬到其他仓库用之前先核对这几处是否适用。
+description: 本地轮询处理 GitHub issue(分诊 + 优先级排序 + 评论驱动推进,单会话每 tick 最多 1 个占 worktree 的处理 Agent、跨会话用 GitHub 标签互斥,支持多个会话/机器同时跑而不冲突)。用户说 "devops-autoissue"、"跑一下 issue 轮询"、"处理一下 issue"、"issue poller" 时触发。当前实现里的分类标签(size:trivial/size:feature/type:question/needs-clarification)、优先级标签(priority:0/1/2)、`pnpm test:changed`、`/devops-openspec-workflow` 调用是针对 mono4ts 仓库写的,搬到其他仓库用之前先核对这几处是否适用。
 allowed-tools: Bash(gh:*), Agent, Skill, AskUserQuestion, ScheduleWakeup
 license: MIT
 compatibility: 需要本机已登录 gh CLI,且对目标仓库有 issues/PR 读写权限。分类标签与处理逻辑目前是 mono4ts 专用,非通用 schema-agnostic 实现(对比 devops-openspec-workflow)。
 metadata:
   author: project
-  version: "3.0"
+  version: "4.0"
 ---
 
 # DevOps AutoIssue(本地轮询)
@@ -40,6 +40,16 @@ metadata:
   §3.0),不是某次调用的返回值,派发方和被派发的 Agent 都能独立推算出同一
   个路径,不需要写进任何状态文件跨 tick 传递。
 
+**v4.0 补充一个纯观察性质的本地文件,不是锁**:`.omc/state/
+issue-poller-session.json`,只记 `{ "currentIssue": <N 或 null>,
+"startedAt": <时间戳或 null> }`,在派发本 tick 唯一的那个处理 Agent(见
+§2)前写入、Agent 结束后清空。**这个文件不参与任何"该不该处理某个 issue"
+的判断**——那个判断永远只看 GitHub 上的 `claude:in-progress` 标签,不看
+这个文件。加它纯粹是为了本会话自己的可观测性(比如中途崩溃后,下次能从
+这个文件看出上次卡在哪个 issue 上,不用去猜),v1.0 踩过的坑是把本地文件
+当成了跨会话的锁在用,这次不重蹈覆辙——它只回答"我(这个会话)现在在干
+什么",不回答"这个 issue 能不能动"。
+
 ## 1. 拉取状态
 
 ```
@@ -47,8 +57,9 @@ gh issue list --state open --json number,title,labels,comments,updatedAt
 ```
 
 对每个 issue,同时看它的标签集合(是否已有分类标签、是否有
-`claude:in-progress` 锁)和最新一条评论(内容、作者、是否带
-`<!-- claude-local:responded -->` 标记)。
+`priority:0`/`priority:1`/`priority:2` 优先级标签、是否有
+`claude:in-progress` 锁、是否有 `claude:wait-reply`)和最新一条评论
+(内容、作者、是否带 `<!-- claude-local:responded -->` 标记)。
 
 ## 2. 对每个 open issue 分类处理
 
@@ -65,11 +76,24 @@ gh issue list --state open --json number,title,labels,comments,updatedAt
 **b) 没有分类标签(`size:trivial`/`size:feature`/`type:question`/
 `needs-clarification` 都没有)→ 分诊**
 
+不占用下面 c) 的"1 个处理 Agent"配额(分诊快、不开 worktree),**同一个
+tick 里所有待分诊的 issue 可以一次性并行派发**。
+
 先打锁(`gh issue edit <N> --add-label "claude:in-progress"` +
 锁定说明评论,带时间戳标记),再派一个只读 Agent(不需要开 worktree,
-不改代码):判断属于哪一类,打对应分类标签,发一条
-说明评论(判级理由 + 后续会怎么处理)。Agent 结束后摘掉
-`claude:in-progress` 标签。
+不改代码):
+1. 判断属于哪一类,打对应分类标签
+2. **顺带判优先级**,打 `priority:0`(紧急)/`priority:1`(正常)/
+   `priority:2`(不急)三选一——判断依据是 issue 内容里能不能看出紧急度
+   线索(比如"生产环境报错"、"影响审批流程"通常是 0;普通功能建议、代码
+   质量类通常是 2);看不出来就打 `priority:1` 默认值,不要为了"更准确"
+   去问一轮——优先级判断本身不值得再开一轮澄清,先给个默认值,人不同意
+   可以自己去 GitHub 上改标签
+3. 发一条说明评论(判级理由 + 优先级理由 + 后续会怎么处理)
+4. 若判级结果是 `needs-clarification`,**同时打上 `claude:wait-reply`**
+   (见下方"等待回复"标签的说明)
+
+Agent 结束后摘掉 `claude:in-progress` 标签。
 
 **c) 已有分类标签,且需要新动作 → 处理**
 
@@ -77,20 +101,40 @@ gh issue list --state open --json number,title,labels,comments,updatedAt
 `<!-- claude-local:responded -->` 标记(说明是人类新发的,不是我们自己
 上一轮发的)。
 
-满足条件的:先打锁(同 b),再派发处理。处理 Agent 结束后摘掉
-`claude:in-progress` 标签。
+满足条件的 issue 里,**按优先级排序,单个 tick 只派发 1 个占 worktree 的
+处理 Agent**(`size:trivial`/`size:feature`)——`type:question`/
+`needs-clarification` 这两类不开 worktree,不占这个"1 个"的配额,可以
+和分诊一样在同一个 tick 里批量并行处理。
 
-**同一个 tick 里,多个需要处理的 issue 要在同一条消息里并行发出多个 Agent
-调用**(这样才是真并行,不是排队)——但**单个 tick 最多同时派发 3 个处理
-Agent**(分诊不占用这个配额,分诊快、不开 worktree)。超过 3 个符合条件
-的 issue 时,优先级:`needs-clarification`(纯回复,最快)>
-`size:trivial` > `size:feature`(最重),没处理到的留到下一个 tick,
-不要一次性把 5 个、10 个 worktree 全开出来——本地机器资源有限,而且一次
-派太多会让"现在到底有几个 agent 在跑、分别在处理什么"变得无法追踪,
-这正是 §3 要解决的"乱跑"问题的另一面:数量本身也要控。这个上限是经验值,
-观察实际单机资源占用后可以调。
+排序规则(从前到后):
+1. `priority:0` > `priority:1` > 没有优先级标签(按 `priority:1` 处理)
+   > `priority:2`
+2. 同优先级内,`size:trivial` 排在 `size:feature` 前面(轻的先处理,
+   反馈更快)
+3. 仍然并列的,按 `updatedAt` 更早的排前面(先来后到,避免有 issue 一直
+   被插队)
+
+取排序后的第一个 `size:trivial`/`size:feature` issue 派发处理(先打锁,
+同 b;若该 issue 当前带着 `claude:wait-reply`,派发前先摘掉——不再是
+"等待回复"状态了,正在处理)。处理 Agent 结束后摘掉 `claude:in-progress`
+标签,§4 里再决定要不要重新打上 `claude:wait-reply`。
+
+**为什么从"3 个并行"改成"1 个"**:之前设计允许单 tick 并行派发最多 3 个
+占 worktree 的处理 Agent,实测发现"现在到底有几个 agent 在跑、分别在
+处理什么"变得难以追踪("乱跑")。改成 1 个之后,任意时刻本会话最多只有
+一个 worktree 在被处理类任务占用,配合优先级排序,"先处理哪个"这个决策
+也有了明确依据,不再是"谁先满足条件谁先跑"的隐式顺序。没排上的 issue
+留到下一个 tick,不会丢——只是延后。
 
 **d) 其余情况 → 跳过**,不需要输出任何东西(noop)。
+
+**`claude:wait-reply` 标签(等待人工回复,方便从 issue 列表筛选查看)**:
+凡是自动化已经做完当前能做的一切、接下来必须等人做点什么才能继续的状态,
+都打上这个标签——`needs-clarification`(等人补充信息)、`size:feature`
+停在 L0/L3/L9 某个人工闸门(等人确认)、已经开出 PR 等人 review/合并,
+都算。反过来,只要重新开始处理(不管是因为新评论触发、还是锁超时自动
+恢复),第一件事就是摘掉这个标签——它不该和 `claude:in-progress` 同时
+挂在同一个 issue 上。
 
 ## 3. 处理 Agent 的 prompt(按分类标签分流)
 
@@ -136,8 +180,13 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
    `HEAD` 建 worktree 的,分支不对就会把无关改动带进新分支。**不是 `main`
    就先 `git checkout main && git pull --ff-only` 再继续**,不要跳过这步
    替用户决定"应该没事"。
-2. 确认 §2 的锁检查已经做完(标签已打、锁定评论已发)。
-3. 确认 §2c 的并发上限(单 tick 最多 3 个处理 Agent)没有超。
+2. 确认 §2 的锁检查已经做完(标签已打、锁定评论已发、`claude:wait-reply`
+   已摘掉)。
+3. 确认这是本 tick 按 §2c 排序选出的**唯一一个**占 worktree 的处理
+   Agent——不要因为同时有好几个 issue 符合条件就都派发,每个 tick 只派 1 个。
+4. 写入 `.omc/state/issue-poller-session.json`:
+   `{ "currentIssue": <N>, "startedAt": "<now>" }`(见 §0,纯观察用,
+   不参与锁判断)。
 
 **prompt 必须明确写清楚这几点**(因为每次派发的都是全新 Agent,没有任何上一轮
 的记忆,唯二能依赖的持久化状态是 git 分支和 GitHub issue 评论串):
@@ -170,22 +219,29 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
 >    本身不需要留着(留着就是下一轮"目标已存在"报错的来源)。
 > 7. 全程不自动合并 PR。
 
-按标签:
+按标签(每条分支收尾时都要按上面"`claude:wait-reply` 标签"那节的判据,
+决定要不要重新打上这个标签):
 
-- **`type:question`** → 只在 issue 下回复,不改代码,不需要 worktree
+- **`type:question`** → 只在 issue 下回复,不改代码,不需要 worktree。
+  不打 `claude:wait-reply`——回答问题不是"卡住等人",issue 保持开着由人
+  自行决定要不要继续追问或关闭。
 - **`needs-clarification`** → 判断新评论是否把信息补齐:补齐了就把标签换成
-  `size:trivial` 或 `size:feature` 并继续处理;没补齐就继续追问缺什么
-  (这一分支也不需要 worktree,纯读+评论)
+  `size:trivial` 或 `size:feature` 并继续处理(不需要 worktree 这一步,
+  真正动手是下一个 tick 的事,见 §2c);没补齐就继续追问缺什么、**保留
+  `claude:wait-reply`**(这一分支也不需要 worktree,纯读+评论)
 - **`size:trivial`** → worktree 内实现修复 → `pnpm test:changed` →
   提交推送 → 开/更新 PR(正文含 `Closes #<N>`)→ 在 issue 下评论
-  (改了什么、测试结果、PR 链接)
+  (改了什么、测试结果、PR 链接)→ **打上 `claude:wait-reply`**(等人
+  review/合并 PR)
 - **`size:feature`** → worktree 内调用 `/devops-openspec-workflow`,把最新
   评论当作最新人工输入推进一步 → 若停在 L0/L3/L9 某个人工闸门,清楚说明
-  卡在哪一层、需要什么输入,然后停止;若已可以开/更新 PR,**PR 正文必须带
-  `Closes #<N>`**(和 `size:trivial` 同样的要求——实测漏过一次:PR 描述里
-  只是文字提到"issue #123",没有 GitHub 认的关键字,合并后 issue 不会自动
-  关闭,得手动关);若已经走到 L10 归档,同样清楚说明"代码/文档都在分支
-  上了,PR 没自动合并,等人 review 后手动合并"
+  卡在哪一层、需要什么输入,然后停止,**打上 `claude:wait-reply`**;若已
+  可以开/更新 PR,**PR 正文必须带 `Closes #<N>`**(和 `size:trivial` 同样
+  的要求——实测漏过一次:PR 描述里只是文字提到"issue #123",没有 GitHub
+  认的关键字,合并后 issue 不会自动关闭,得手动关),同样**打上
+  `claude:wait-reply`**(等人 review/合并);若已经走到 L10 归档,同样
+  清楚说明"代码/文档都在分支上了,PR 没自动合并,等人 review 后手动
+  合并",**打上 `claude:wait-reply`**
 
 每条自动发出的评论,末尾都要加一行:
 
@@ -198,7 +254,11 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
 1. **摘锁**:`gh issue edit <N> --remove-label "claude:in-progress"`。
    这一步不能跳,漏摘的锁会挡住后面所有 tick(包括其他会话)处理这个
    issue,直到 60 分钟超时自动恢复——与其等超时,不如每次都确保摘干净。
-2. **核实 worktree 确实清理了**:处理 Agent 的 prompt(§3.0 第 6 点)要求
+   `claude:wait-reply` 打不打由 Agent 自己按 §3 的分支逻辑决定,这里不用
+   管。
+2. **清空本地会话记录**:把 `.omc/state/issue-poller-session.json` 的
+   `currentIssue`/`startedAt` 都改回 `null`(见 §0)。
+3. **核实 worktree 确实清理了**:处理 Agent 的 prompt(§3.0 第 6 点)要求
    它自己在收尾前跑 `node scripts/wt.mjs done issue-<N>`,派发方这一步只需
    要核实结果——`node scripts/wt.mjs list` 或直接 `ls .worktrees/` 确认
    `issue-<N>` 已经不在了。
@@ -234,6 +294,10 @@ gh label create "size:feature" --color "1D76DB" --description "需要走 openspe
 gh label create "type:question" --color "5319E7" --description "提问,不需要改代码" --force
 gh label create "needs-clarification" --color "FBCA04" --description "信息不足,需要追问" --force
 gh label create "claude:in-progress" --color "D93F0B" --description "正在被自动化处理,勿并发操作" --force
+gh label create "claude:wait-reply" --color "FEF2C0" --description "等待人工回复/review 才能继续" --force
+gh label create "priority:0" --color "B60205" --description "优先级:紧急" --force
+gh label create "priority:1" --color "C5DEF5" --description "优先级:正常(默认)" --force
+gh label create "priority:2" --color "EEEEEE" --description "优先级:不急" --force
 ```
 
 ---
