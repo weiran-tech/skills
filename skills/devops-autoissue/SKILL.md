@@ -11,7 +11,9 @@ metadata:
 
 # DevOps AutoIssue(本地轮询)
 
-每次被唤醒(由 `/loop` 或 `ScheduleWakeup` 驱动),执行一次 tick。
+每次被唤醒,执行**一次** tick(拉状态 → 判断 → 派发 → 清理),然后结束。
+**这个 skill 本身没有自驱动的 tick 机制**——不会自己在执行完一次后等几分钟
+再重新跑一次,需要一个外部驱动器持续重新调用它,见 §5。
 
 ## 0. 协调状态全部放在 GitHub 上,不用本地文件
 
@@ -208,10 +210,18 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
    - 只有确认了原因(比如就是单纯漏了这一步、没有其他异常)之后,才代为
      执行 `node scripts/wt.mjs done issue-<N>` 补上清理。
 
-## 5. 下一次 tick
+## 5. 下一次 tick(需要外部驱动器,本 skill 不自带)
 
-用 `/loop`(动态间隔,建议 3-5 分钟)或 `ScheduleWakeup` 排下一次。如果这次
-tick 完全没有任何变化(没有分诊、没有处理),标记为 noop。
+- **`/loop`(动态间隔,建议 3-5 分钟)**:Claude Code 自带的、能让一个会话
+  常驻并按间隔自己醒来重新执行的机制。`ScheduleWakeup` 是 `/loop` 动态
+  模式内部用来排下一次唤醒时间的工具,**不是独立于 `/loop` 之外的另一个
+  选项**——离开 `/loop` 会话单独调用它没有意义。如果这次 tick 完全没有
+  任何变化(没有分诊、没有处理),标记为 noop。
+- **OS 级定时任务(如 macOS `launchd`/`cron`)**:真正独立于 `/loop` 之外的
+  替代方案,定时跑 `claude -p "/devops-autoissue"`,不需要开着一个 Claude
+  Code 会话或终端窗口,每次触发都是全新的一次性进程,跑完一个 tick 就退出。
+  权衡是:失去 `/loop` 那种"同一个会话、上下文缓存复用"的连续性,换来
+  "不用一直开着终端"的简单性。
 
 ## 环境准备(第一次在某个仓库启用前)
 
