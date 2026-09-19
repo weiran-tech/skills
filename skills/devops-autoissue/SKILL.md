@@ -308,7 +308,20 @@ gh label create "priority:2" --color "EEEEEE" --description "优先级:不急" -
 
 设计文档(在 mono4ts 仓库内):`openspec/design/local-issue-polling.md`。
 
-**已知限制**:`claude:in-progress` 锁本身依赖"先查后写"两步操作,理论上
+**已知限制:共享主目录本身没有锁**。本 skill 已经解决了 issue 级互斥
+(`claude:in-progress` 标签)和 worktree 级隔离(`scripts/wt.mjs` 各开
+各的 `.worktrees/issue-<N>`),但**主工作目录(不是某个 worktree)本身
+是唯一的共享可变状态**——如果同一空间里有别的会话(不管是不是在跑这个
+skill)直接在主目录里 `git checkout`/改文件,可能会打断正在用主目录做
+判断的这次 tick(比如 §3.0 第 1 步"确认在 main 分支"的检查窗口)。这类
+冲突**技术上管不到**,因为冲突另一方可能压根没在跑这个 skill。唯一的
+应对是操作纪律,不是代码:**主目录只做编排类操作(跑 gh 命令、判断状态、
+发起 tick),不直接在主目录里做实质性改动**——真要改代码,一律先
+`scripts/wt.mjs new <id>` 开自己的 worktree 再进去做,这本来就是
+`scripts/wt.mjs` 自己的既定用法,只是需要所有在这个仓库里工作的会话
+(不限于跑这个 skill 的)都遵守,而不只是这个 skill 自己知道。
+
+`claude:in-progress` 锁本身依赖"先查后写"两步操作,理论上
 仍有极小的竞态窗口(两个会话几乎同时查到"没锁"、几乎同时打锁)——但这个
 窗口极短(一次 API 调用的时间),且 Git 的 worktree 机制是第二道保险
 (同一分支被第二个 worktree 检出会直接报错,不会静默破坏数据),两道防线
