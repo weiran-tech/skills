@@ -6,7 +6,7 @@ license: MIT
 compatibility: 需要本机已登录 gh CLI,且对目标仓库有 issues/PR 读写权限。分类标签与处理逻辑目前是 mono4ts 专用,非通用 schema-agnostic 实现(对比 devops-openspec-workflow)。
 metadata:
   author: project
-  version: "5.0"
+  version: "5.1"
 ---
 
 # DevOps AutoIssue(本地轮询)
@@ -17,16 +17,12 @@ metadata:
 
 ## 0. 协调状态全部放在 GitHub 上,不用本地文件
 
-**v1.0 曾经用本地 `.omc/state/issue-poller.json` 记锁和去重状态,已废弃。**
-实测暴露的问题:如果同一台机器上开了两个 Claude Code 会话(甚至只是同一个
-用户手滑开了两个窗口),各自读写这份本地文件,互相看不到对方的锁状态,
-会对同一个 issue 同时派发处理,造成重复工作、评论互相打架、甚至同一分支
-被两个 worktree 抢注。本地文件只在"单会话、单进程"前提下成立,这个前提
-在实践中不成立。
-
-现在**唯一的协调状态源是 GitHub 本身**(标签 + 评论),原因很直接:不管
-有几个会话、跑在几台机器上,大家看到的都是同一份 GitHub 数据,天然不会
-"看不见对方"。具体是:
+本地状态文件在多会话场景下连续出过两次真实事故(v1.0 当跨会话锁用、
+v4.0 当会话级记账用,细节见 mono4ts 仓库 `openspec/design/
+local-issue-polling.md` §4.2/§4.5,这里不重复维护)。**唯一的协调状态源
+是 GitHub 本身**(标签 + 评论)——不管几个会话、跑在几台机器上,大家看到
+的都是同一份数据,天然不会"看不见对方"。除非天然按目录隔离(像 worktree
+那样),否则不要再引入共享路径的本地文件。具体是:
 
 - **锁**:`claude:in-progress` 标签(需要预先在仓库里创建,见文末环境准备)。
   谁要处理某个 issue,先确认没有这个标签,再立刻打上,处理完再摘掉。
@@ -55,31 +51,10 @@ metadata:
   这个标记在不在,不需要额外记录"已处理到第几条评论"。
 - **worktree**:路径由 `.worktrees/issue-<N>` 这个命名约定本身决定(见
   §3.0),不是某次调用的返回值,派发方和被派发的 Agent 都能独立推算出同一
-  个路径,不需要写进任何状态文件跨 tick 传递。
-
-**v4.0 曾经加过一个"纯观察性质"的本地文件
-`.omc/state/issue-poller-session.json`(记"本会话当前在处理哪个 issue"),
-v5.0 已删除。** 删除理由有两层,第二层才是根本的:
-
-1. **实现就是错的**:它用的是一个**固定共享路径**,不是按会话隔离的。
-   两个会话同时跑时互相覆盖——A 写入自己在处理的 issue,B 紧接着覆盖成
-   自己的;更糟的是 A 处理完按约定"清空"这个文件时,会把 B 还在进行中的
-   记录一起抹掉。一个"用来诊断当前状态"的文件,恰恰在最需要它的多会话
-   场景下内容是错的。
-2. **它的全部用途已经被别的机制吸收干净了**(这才是不值得修的原因):
-   - "这个 Agent 还活着吗" → 由 issue 上的进度评论回答(§2a、§3.1),
-     而且是跨机器可见的,本地文件做不到
-   - "现在在处理什么" → 由每个 tick 的终端状态行回答(§1、§3.1),
-     数据源是 GitHub + git,不是本地记账
-
-  修它需要引入会话 ID(其实拿得到——OMC 已有 `.omc/state/sessions/
-  {sessionId}/` 约定,ID 就在会话自己的 scratchpad 路径里),但修好之后
-  它也不再承担任何独有职责,纯属多一个要维护的状态源。
-
-**沉淀下来的教训**:这个仓库的多会话现实下,**本地文件状态已经连续坑过
-两次**(v1.0 拿它当跨会话锁、v4.0 拿它当会话级记账)。除非天然按目录隔离
-(像 worktree 那样),否则不要再引入共享路径的本地文件——协调状态放
-GitHub,观测数据现算。
+  个路径,不需要写进任何状态文件跨 tick 传递。"这个 Agent 还活着吗"由
+  issue 上的进度评论回答(§2a/§3.1,跨机器可见);"现在在处理什么"由每
+  个 tick 的终端状态行回答(§1/§3.1,数据源是 GitHub + git)——都不需要
+  本地状态文件。
 
 ## 1. 拉取状态
 
@@ -116,10 +91,9 @@ gh api graphql -f query='query($o:String!,$r:String!){repository(owner:$o,name:$
 
 **a) 已经有 `claude:in-progress` 标签 → 先判断对方是不是还活着**
 
-**判据是"最近有没有活着的证据",不是"开始了多久"**——这两者的区别是
-真实的 bug:实测一次 `size:feature` 派发跑了 27.5 分钟,跑到 70 分钟
-完全可能,而单纯按"开始时间超过 60 分钟"判定就会把一个**正在正常干活**
-的 agent 的锁抢走,然后派第二个 agent 去动同一个分支。
+**判据是"最近有没有活着的证据",不是"开始了多久"**——size:feature 派发
+跑到 70 分钟完全正常,单纯按"开始时间超过 60 分钟"判定会把正在正常干活
+的 agent 的锁抢走,派第二个 agent 去动同一个分支。
 
 所以:找最新一条带 `<!-- claude-local:progress -->` **或**
 `<!-- claude-lock:started:... -->` 标记的评论(取两者里时间更晚的那条,
@@ -132,8 +106,8 @@ gh api graphql -f query='query($o:String!,$r:String!){repository(owner:$o,name:$
   在 issue 下留一条"检测到超过 60 分钟无进度上报,判定为异常中断,
   自动恢复重试"的说明评论,然后按下面 b)/c) 正常流程重新判断这个 issue
 
-阈值取 60 分钟、而进度上报要求 30-60 分钟一次,是配套的:上报周期必须
-明显短于判死阈值,否则一个活着但刚好两次上报间隔拉长的 agent 会被误杀。
+阈值取 60 分钟、进度上报要求 30 分钟一次,是配套的:上报周期必须明显
+短于判死阈值,否则一个活着但刚好两次上报间隔拉长的 agent 会被误杀。
 
 **b) 没有分类标签(`size:trivial`/`size:feature`/`type:question`/
 `needs-clarification` 都没有)→ 分诊**
@@ -229,14 +203,8 @@ issue 会被一个 `priority:2` 的前置饿死。这只影响本 tick 的排序
 取排序后的第一个 `size:trivial`/`size:feature` issue 派发处理(先打锁,
 同 b;若该 issue 当前带着 `claude:wait-reply`,派发前先摘掉——不再是
 "等待回复"状态了,正在处理)。处理 Agent 结束后摘掉 `claude:in-progress`
-标签,§4 里再决定要不要重新打上 `claude:wait-reply`。
-
-**为什么从"3 个并行"改成"1 个"**:之前设计允许单 tick 并行派发最多 3 个
-占 worktree 的处理 Agent,实测发现"现在到底有几个 agent 在跑、分别在
-处理什么"变得难以追踪("乱跑")。改成 1 个之后,任意时刻本会话最多只有
-一个 worktree 在被处理类任务占用,配合优先级排序,"先处理哪个"这个决策
-也有了明确依据,不再是"谁先满足条件谁先跑"的隐式顺序。没排上的 issue
-留到下一个 tick,不会丢——只是延后。
+标签,§4 里再决定要不要重新打上 `claude:wait-reply`。没排上的 issue 留到
+下一个 tick,不会丢——只是延后。
 
 **d) 其余情况 → 跳过**,不需要输出任何东西(noop)。
 
@@ -252,22 +220,11 @@ issue 会被一个 `priority:2` 的前置饿死。这只影响本 tick 的排序
 
 ### 3.0 worktree 用仓库自己的 `scripts/wt.mjs`,不用平台的 `isolation: "worktree"`
 
-**v2.0 曾经用 `Agent(isolation: "worktree")`,已废弃。** 实测暴露三个问题:
-
-1. 平台自己决定 worktree 路径,落在 `.claude/worktrees/`,不是本仓库的约定
-   目录 `.worktrees/`(`scripts/wt.mjs`、`.gitignore`、
-   `openspec/guards/worktree-orphan.mjs` 三处都认 `.worktrees/`,多一个
-   平台自建的路径就是第三套约定)
-2. 平台给 worktree 起名叫 `agent-<一串哈希>`,人看着完全不知道对应哪个
-   issue,好几个同时跑的时候没法一眼区分
-3. 平台的机制不知道这仓库自己的规矩——不会带 `.env`/端口/DB 隔离过去。
-   之前一次处理 `size:feature` issue 时,Agent 在里面跑 `pnpm db:migrate`
-   失败,当时以为是"沙箱权限限制读不了 `.env`",后来查清楚了:根本原因是
-   平台建的 worktree 里压根没有 `.env` 这个文件,`scripts/wt.mjs` 的
-   `carryFiles()` 步骤专门做这件事,平台机制不知道要做
-
-所以**处理 Agent 不要传 `isolation` 参数**,改成让 Agent 自己在 prompt
-里调用仓库原生的 `scripts/wt.mjs`:
+**不要传 `isolation` 参数**——平台机制会落在 `.claude/worktrees/`(不是
+仓库约定的 `.worktrees/`)、目录名是随机哈希认不出对应哪个 issue、且不带
+`.env`/端口/DB 隔离过去(踩过 `pnpm db:migrate` 因此连接失败的坑,细节见
+mono4ts `openspec/design/local-issue-polling.md` §4.3)。改成让 Agent 自己
+在 prompt 里调用仓库原生的 `scripts/wt.mjs`:
 
 ```
 node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
@@ -358,7 +315,7 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
 - **`size:trivial`** → worktree 内实现修复 → `pnpm test:changed` →
   提交推送 → 开/更新 PR(正文含 `Closes #<N>`)→ 在 issue 下评论
   (改了什么、测试结果、PR 链接)→ **打上 `claude:wait-reply`**(等人
-  review/合并 PR)
+  review/合并 PR——**收到合并类指令后怎么处理见 §3.2**)
 - **`size:feature`** → worktree 内调用 `/devops-openspec-workflow`,把最新
   评论当作最新人工输入推进一步 → 若停在 L0/L3/L9 某个人工闸门,清楚说明
   卡在哪一层、需要什么输入,然后停止,**打上 `claude:wait-reply`**;若已
@@ -367,7 +324,9 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
   认的关键字,合并后 issue 不会自动关闭,得手动关),同样**打上
   `claude:wait-reply`**(等人 review/合并);若已经走到 L10 归档,同样
   清楚说明"代码/文档都在分支上了,PR 没自动合并,等人 review 后手动
-  合并",**打上 `claude:wait-reply`**
+  合并",**打上 `claude:wait-reply`**。**PR 提交(不管有没有归档)都不是
+  这条 issue 的终点,收到人类的合并/批准类指令后怎么处理、`/loop` 什么
+  时候才能真的把它当成收尾,见 §3.2——不要在这一步就假定"活干完了"。**
 
 每条**收尾性质**的评论(回答完问题、追问完信息、开完 PR、停在闸门),
 末尾都要加一行:
@@ -381,14 +340,8 @@ node scripts/wt.mjs new issue-<N> --branch issue-<N> --isolate-db
 
 ### 3.1 进度上报:为什么必须有,以及谁报给谁
 
-**动机不只是"让人安心"**,它修掉了一个真实的判定 bug:派发出去的 Agent
-在后台跑,外部无法观测它的内部状态,所以"它还活着吗"只能靠**它自己留下
-的痕迹**来判断。没有进度上报时,§2a 只能按"开工了多久"盲目计时,于是一个
-跑了 70 分钟但**完全正常**的 Agent 会被另一个 tick 判定成崩溃残留、锁被
-抢走、第二个 Agent 被派去动同一个分支。有了 30 分钟一次的进度评论,存活
-判断就有了证据:**最近有上报 = 活着**,与它已经跑了多久无关。
-
-**两个上报渠道,各自能到的地方不同**:
+派发出去的 Agent 在后台跑,外部无法观测它的内部状态,"它还活着吗"只能
+靠**它自己留下的痕迹**判断(呼应 §2a 的存活判据)。**两个上报渠道,各自能到的地方不同**:
 
 | 渠道 | 谁发 | 到哪 | 能不能实时看到 |
 |---|---|---|---|
@@ -409,6 +362,37 @@ issue #<N> 处理中 · 最近上报 <M> 分钟前 · 分支 issue-<N> 已有 <K
 这几项都能从外部拿到(`gh issue view` 读最新 progress 评论时间、
 `git log main..issue-<N> --oneline | wc -l`、`ls .worktrees/`),不需要
 也不应该去窥探 Agent 的 transcript。
+
+### 3.2 归档先于合并:PR 提交不是终点
+
+`size:feature` 停在"PR 已开 + `claude:wait-reply`"不是终态——真正的
+终态是"issue CLOSED 且 openspec change 已归档"。人类回一句"合并"类
+指令(如"合并"、"批准归档"、"lgtm 合并吧")时,固定按这个顺序处理,
+不能跳步:
+
+1. **查归档**:`git -C .worktrees/issue-<N> ls-tree origin/issue-<N>
+   --name-only -- openspec/changes/<name>/ | head -1`。有输出(目录还在
+   `openspec/changes/<name>/`)= 未归档;无输出 = 已归档。
+2. **未归档就补**:PR 分支上跑 `openspec archive <name> -y`,
+   `git add -A && git commit -m "归档 openspec change(合并前置步骤)"`、
+   `git push`,等这次推送的 CI 重新跑绿(`gh pr checks <N> --watch`)——
+   归档本身也是代码变更(移动 `openspec/changes/`、改写
+   `openspec/specs/`),不能假定不会红。已归档则跳过这步。
+3. **合并**:`gh pr merge <N> --squash --delete-branch`(squash 是这个
+   仓库观察到的既有惯例,合并前用 `gh pr list --state merged --limit 3`
+   抽查是否还是这个方式)。
+4. **核实收尾**:`gh issue view <N> --json state` 应为 `CLOSED`(不是则
+   手动 `gh issue close <N>`);`git branch -a | grep issue-<N>`、
+   `ls .worktrees/` 确认分支与 worktree 都清理干净。
+5. **只有 1-4 全部确认完才摘 `claude:wait-reply`**——摘掉的时机是"issue
+   已 CLOSED 且归档已确认",不是"我发出了合并命令"。
+
+**驱动本 skill 的自驱动 `/loop` 同理**:issue 还 OPEN 且带
+`claude:wait-reply` 时,"PR 已开"本身不构成 `ScheduleWakeup({stop:
+true})` 的理由,继续按心跳排下一次唤醒。只有 issue 变 `CLOSED`(且核实
+过归档已发生)、或是 `type:question`/`needs-clarification` 这类本不涉及
+归档/合并的分支收尾,才能把它划掉。人类明确说"不用等了"除外,那是用户
+主动结束。
 
 ## 4. Agent 完成后
 
@@ -467,23 +451,11 @@ gh label create "priority:2" --color "EEEEEE" --description "优先级:不急" -
 
 设计文档(在 mono4ts 仓库内):`openspec/design/local-issue-polling.md`。
 
-**已知限制:共享主目录本身没有锁**。本 skill 已经解决了 issue 级互斥
-(`claude:in-progress` 标签)和 worktree 级隔离(`scripts/wt.mjs` 各开
-各的 `.worktrees/issue-<N>`),但**主工作目录(不是某个 worktree)本身
-是唯一的共享可变状态**——如果同一空间里有别的会话(不管是不是在跑这个
-skill)直接在主目录里 `git checkout`/改文件,可能会打断正在用主目录做
-判断的这次 tick(比如 §3.0 第 1 步"确认在 main 分支"的检查窗口)。这类
-冲突**技术上管不到**,因为冲突另一方可能压根没在跑这个 skill。唯一的
-应对是操作纪律,不是代码:**主目录只做编排类操作(跑 gh 命令、判断状态、
-发起 tick),不直接在主目录里做实质性改动**——真要改代码,一律先
-`scripts/wt.mjs new <id>` 开自己的 worktree 再进去做,这本来就是
-`scripts/wt.mjs` 自己的既定用法,只是需要所有在这个仓库里工作的会话
-(不限于跑这个 skill 的)都遵守,而不只是这个 skill 自己知道。
-
-`claude:in-progress` 锁本身依赖"先查后写"两步操作,理论上
-仍有极小的竞态窗口(两个会话几乎同时查到"没锁"、几乎同时打锁)——但这个
-窗口极短(一次 API 调用的时间),且 Git 的 worktree 机制是第二道保险
-(同一分支被第二个 worktree 检出会直接报错,不会静默破坏数据),两道防线
-叠加,已经比 v1.0 纯本地锁安全得多。真正的强一致分布式锁(比如靠 GitHub
-Issue 的原子 `assignee` 字段做 compare-and-swap)是进一步加固的方向,
-目前判断没必要为了这么小的窗口引入更复杂的机制。
+**已知限制:共享主目录本身没有锁**。`claude:in-progress` 标签解决了
+issue 级互斥,`scripts/wt.mjs` 各开各的 `.worktrees/issue-<N>` 解决了
+worktree 级隔离,但**主工作目录本身是唯一的共享可变状态**,技术上管不到
+别的会话在这里 `git checkout`/改文件。应对是操作纪律:**主目录只做编排
+类操作(跑 gh 命令、判断状态、发起 tick),不直接在主目录里做实质性
+改动**——真要改代码,一律先 `scripts/wt.mjs new <id>` 开自己的 worktree
+再进去做,这需要所有在这个仓库里工作的会话都遵守,不只是这个 skill 自己
+知道。
